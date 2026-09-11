@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { TeamMembers } from "@/components/team-members";
 
 export default async function DashboardContent() {
     // This page depends on the current user's session,
@@ -231,6 +232,15 @@ export default async function DashboardContent() {
                             </a>
                         </div>
                     )}
+                </section>
+
+                {/* Team Members */}
+                <section className="mt-12">
+                    <TeamMembers
+                        teamId={team.id}
+                        currentUserId={userId}
+                        currentUserRole={membership.role}
+                    />
                 </section>
             </div>
         </main>
