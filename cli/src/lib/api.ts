@@ -145,3 +145,64 @@ export async function createSecret(
         },
     );
 }
+
+export async function getAllSecretValues(
+    token: string,
+    projectId: string,
+    environmentId: string,
+): Promise<SecretValue[]> {
+    const secrets = await getSecrets(
+        token,
+        projectId,
+        environmentId,
+    );
+
+    const values = await Promise.all(
+        secrets.map((secret) =>
+            getSecretValue(
+                token,
+                projectId,
+                environmentId,
+                secret.id,
+            ),
+        ),
+    );
+
+    return values;
+}
+
+export async function getAllSecretValuesBulk(
+    token: string,
+    projectId: string,
+    environmentId: string,
+): Promise<SecretValue[]> {
+    const data = await request<{
+        secrets: SecretValue[];
+    }>(
+        `/api/v1/projects/${projectId}/environments/${environmentId}/secrets/values`,
+        token,
+    );
+
+    return data.secrets;
+}
+
+export type Team = {
+    id: string;
+    name: string;
+    slug: string;
+    owner_id: string;
+    role: "owner" | "admin" | "developer" | "viewer";
+    created_at: string;
+    updated_at: string;
+};
+
+export async function getTeams(
+    token: string,
+): Promise<Team[]> {
+    const data = await request<{ teams: Team[] }>(
+        "/api/v1/teams",
+        token,
+    );
+
+    return data.teams;
+}

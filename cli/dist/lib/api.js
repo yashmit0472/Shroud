@@ -43,3 +43,16 @@ export async function createSecret(token, projectId, environmentId, secret) {
         body: JSON.stringify(secret),
     });
 }
+export async function getAllSecretValues(token, projectId, environmentId) {
+    const secrets = await getSecrets(token, projectId, environmentId);
+    const values = await Promise.all(secrets.map((secret) => getSecretValue(token, projectId, environmentId, secret.id)));
+    return values;
+}
+export async function getAllSecretValuesBulk(token, projectId, environmentId) {
+    const data = await request(`/api/v1/projects/${projectId}/environments/${environmentId}/secrets/values`, token);
+    return data.secrets;
+}
+export async function getTeams(token) {
+    const data = await request("/api/v1/teams", token);
+    return data.teams;
+}
