@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       name: body.name.trim(),
       token_prefix: prefix,
       token_hash: hash,
-      scopes: body.scopes ?? ["secrets:read"],
+      scopes: body.scopes ?? ["secrets:read", "secrets:write"],
       expires_at: body.expires_at ?? null,
     })
     .select(
