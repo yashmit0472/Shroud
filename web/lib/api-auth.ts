@@ -6,6 +6,7 @@ type ApiToken = {
   team_id: string;
   created_by: string;
   scopes: string[];
+  hash: string;
 };
 
 export async function authenticateApiToken(request: Request) {
@@ -64,6 +65,7 @@ export async function authenticateApiToken(request: Request) {
       team_id: token.team_id,
       created_by: token.created_by,
       scopes: Array.isArray(token.scopes) ? token.scopes : [],
+      hash: tokenHash,
     } as ApiToken,
     error: null,
   };

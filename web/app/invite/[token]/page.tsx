@@ -70,6 +70,7 @@ export default function InvitePage({
 
             setTimeout(() => {
                 router.push("/dashboard");
+                router.refresh();
             }, 1200);
         } catch {
             setError(
@@ -90,7 +91,7 @@ export default function InvitePage({
                     </div>
 
                     <h1 className="text-xl font-semibold">
-                        You've been invited to Shroud
+                        You&apos;ve been invited to Shroud
                     </h1>
 
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -157,7 +158,7 @@ export default function InvitePage({
                             </h2>
 
                             <p className="mt-1 text-sm text-muted-foreground">
-                                You've joined the team.
+                                You&apos;ve joined the team.
                                 Redirecting to your
                                 dashboard...
                             </p>

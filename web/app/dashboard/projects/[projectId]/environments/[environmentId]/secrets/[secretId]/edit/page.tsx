@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { EditSecretForm } from "./edit-secret-form";
+import { canManage, canWrite, projectAccess } from "@/lib/workspace-access";
+import { DeleteSecretButton } from "@/components/delete-secret-button";
 
 type Props = {
   params: Promise<{
@@ -16,6 +18,8 @@ export default async function EditSecretPage({ params }: Props) {
   const { projectId, environmentId, secretId } = await params;
 
   const supabase = await createClient();
+  const access = await projectAccess(projectId, environmentId);
+  if (access.status !== 200 || !canWrite(access.role)) redirect(`/dashboard/projects/${projectId}/environments/${environmentId}`);
 
   const {
     data: claimsData,
@@ -65,6 +69,7 @@ export default async function EditSecretPage({ params }: Props) {
           initialDescription={secret.description ?? ""}
           initialRequired={secret.is_required}
         />
+        {canManage(access.role) && <DeleteSecretButton projectId={projectId} environmentId={environmentId} secretId={secretId} secretKey={secret.key} />}
       </div>
     </main>
   );

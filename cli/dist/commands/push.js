@@ -1,95 +1,35 @@
 import { Command } from "commander";
-import { select } from "@inquirer/prompts";
 import fs from "fs";
-import { getProjects, getEnvironments, createSecret, } from "../lib/api.js";
+import { createSecret } from "../lib/api.js";
 import { getToken } from "../lib/config.js";
-function parseEnvFile(content) {
-    const variables = [];
-    for (const line of content.split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) {
-            continue;
-        }
-        const separator = trimmed.indexOf("=");
-        if (separator === -1) {
-            continue;
-        }
-        const key = trimmed.slice(0, separator).trim();
-        let value = trimmed.slice(separator + 1);
-        if (value.startsWith('"') &&
-            value.endsWith('"')) {
-            value = value.slice(1, -1);
-        }
-        else if (value.startsWith("'") &&
-            value.endsWith("'")) {
-            value = value.slice(1, -1);
-        }
-        if (key) {
-            variables.push({ key, value });
-        }
-    }
-    return variables;
-}
+import { parseEnvFile } from "../lib/env-file.js";
+import { selectEnvironment } from "../lib/selection.js";
 export const pushCommand = new Command("push")
     .description("Push environment variables from .env to Shroud")
-    .action(async () => {
-    const token = getToken();
-    if (!token) {
-        console.error("Not logged in. Run `shroud login <token>`.");
-        process.exitCode = 1;
-        return;
-    }
-    if (!fs.existsSync(".env")) {
-        console.error("No .env file found.");
-        process.exitCode = 1;
-        return;
-    }
-    const content = fs.readFileSync(".env", "utf8");
-    const variables = parseEnvFile(content);
-    if (variables.length === 0) {
-        console.error("No environment variables found in .env.");
-        return;
-    }
+    .option("-p, --project <id-or-slug>", "Project ID or slug")
+    .option("-e, --environment <id-or-slug>", "Environment ID, slug, or type")
+    .option("-f, --file <path>", "Input file", ".env")
+    .action(async (options) => {
+    let pushed = 0;
     try {
-        const projects = await getProjects(token);
-        if (projects.length === 0) {
-            console.error("No projects found.");
-            return;
-        }
-        const projectId = await select({
-            message: "Select a project:",
-            choices: projects.map((project) => ({
-                name: project.name,
-                value: project.id,
-            })),
-        });
-        const environments = await getEnvironments(token, projectId);
-        if (environments.length === 0) {
-            console.error("No environments found.");
-            return;
-        }
-        const environmentId = await select({
-            message: "Select an environment:",
-            choices: environments.map((environment) => ({
-                name: `${environment.name} (${environment.type})`,
-                value: environment.id,
-            })),
-        });
-        console.log(`Pushing ${variables.length} environment variables...`);
+        const token = getToken();
+        if (!token)
+            throw new Error("Not logged in. Run shroud login or set SHROUD_TOKEN.");
+        const variables = parseEnvFile(fs.readFileSync(options.file, "utf8"));
+        if (!variables.length)
+            throw new Error("No environment variables found in the input file.");
+        const { projectId, environmentId } = await selectEnvironment(token, options);
         for (const variable of variables) {
-            const result = await createSecret(token, projectId, environmentId, {
-                key: variable.key,
-                value: variable.value,
-            });
-            const version = result.secret?.version ?? 1;
-            console.log(`✓ ${variable.key} → version ${version}`);
+            const result = await createSecret(token, projectId, environmentId, variable);
+            pushed++;
+            console.log(variable.key + " → version " + (result.secret?.version ?? 1));
         }
-        console.log(`Successfully pushed ${variables.length} environment variables.`);
+        console.log("Successfully pushed " + pushed + " environment variables.");
     }
     catch (error) {
-        console.error(error instanceof Error
-            ? error.message
-            : "Failed to push environment variables.");
+        console.error(error instanceof Error ? error.message : "Failed to push secrets");
+        if (pushed)
+            console.error(pushed + " variables were already pushed before this failure.");
         process.exitCode = 1;
     }
 });

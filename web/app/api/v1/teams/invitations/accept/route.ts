@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
+import { workspaceCookieName, workspaceCookieOptions } from "@/lib/workspace-selection";
 
 export async function POST(request: Request) {
     const supabase = await createClient();
@@ -71,6 +73,8 @@ export async function POST(request: Request) {
         );
     }
 
+    const joinedTeam = data?.[0];
+    if (joinedTeam?.team_id) (await cookies()).set(workspaceCookieName, joinedTeam.team_id, workspaceCookieOptions);
     return NextResponse.json({
         team: data?.[0] ?? null,
     });

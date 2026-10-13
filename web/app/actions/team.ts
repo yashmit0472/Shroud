@@ -1,12 +1,13 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
+import { workspaceCookieName, workspaceCookieOptions } from "@/lib/workspace-selection";
 
 export type CreateTeamResult =
     | {
           success: true;
           teamId: string;
-          projectId: string;
       }
     | {
           success: false;
@@ -64,9 +65,9 @@ export async function createTeam(
         };
     }
 
+    (await cookies()).set(workspaceCookieName, data.team_id, workspaceCookieOptions);
     return {
         success: true,
         teamId: data.team_id,
-        projectId: data.project_id,
     };
 }

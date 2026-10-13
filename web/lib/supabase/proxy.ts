@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasEnvVars } from "../utils";
+import { workspaceCookieName, workspaceCookieOptions } from "@/lib/workspace-selection";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -51,13 +52,31 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname !== "/" &&
     !user &&
     !request.nextUrl.pathname.startsWith("/login") &&
+    !request.nextUrl.pathname.startsWith("/docs") &&
+    !request.nextUrl.pathname.startsWith("/downloads") &&
     !request.nextUrl.pathname.startsWith("/auth") &&
-    !request.nextUrl.pathname.startsWith("/api/v1")
+    !request.nextUrl.pathname.startsWith("/api/v1") &&
+    request.nextUrl.pathname !== "/api/browser-cli" &&
+    request.nextUrl.pathname !== "/api/workspaces"
   ) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();
-    url.pathname = "/auth/login";
+    url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set("redirect", request.nextUrl.pathname + request.nextUrl.search);
     return NextResponse.redirect(url);
+  }
+
+  const projectId = request.nextUrl.pathname.match(/^\/dashboard\/projects\/([a-f0-9-]{36})(?:\/|$)/i)?.[1];
+  if (user && projectId) {
+    const { data: project } = await supabase.from("projects").select("team_id").eq("id", projectId).maybeSingle();
+    if (project && request.cookies.get(workspaceCookieName)?.value !== project.team_id) {
+      request.cookies.set(workspaceCookieName, project.team_id);
+      const previous = supabaseResponse;
+      supabaseResponse = NextResponse.next({ request });
+      previous.cookies.getAll().forEach((cookie) => supabaseResponse.cookies.set(cookie));
+      supabaseResponse.cookies.set(workspaceCookieName, project.team_id, workspaceCookieOptions);
+    }
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.

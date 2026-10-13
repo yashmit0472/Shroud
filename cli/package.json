@@ -2,10 +2,14 @@
   "name": "shroud-cli",
   "version": "1.0.0",
   "type": "module",
+  "bin": { "shroud": "dist/index.js" },
+  "files": ["dist", "README.md"],
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepack": "npm run build",
+    "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@inquirer/prompts": "^8.7.2",

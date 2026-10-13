@@ -27,7 +27,7 @@ export function EditSecretForm({
 }: Props) {
   const router = useRouter();
 
-  const [key, setKey] = useState(initialKey);
+  const key = initialKey;
   const [value, setValue] = useState("");
   const [description, setDescription] = useState(initialDescription);
   const [required, setRequired] = useState(initialRequired);
@@ -56,7 +56,7 @@ export function EditSecretForm({
           },
           body: JSON.stringify({
             key: key.trim(),
-            value,
+            ...(value !== "" ? { value } : {}),
             description: description.trim(),
             is_required: required,
           }),
@@ -93,7 +93,7 @@ export function EditSecretForm({
         <Input
           id="key"
           value={key}
-          onChange={(e) => setKey(e.target.value)}
+          readOnly
           placeholder="DATABASE_URL"
           disabled={loading}
           className="font-mono"

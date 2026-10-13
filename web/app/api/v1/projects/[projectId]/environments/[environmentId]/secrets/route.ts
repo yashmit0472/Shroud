@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { authenticateApiToken } from "@/lib/api-auth";
 import { encryptSecret } from "@/lib/crypto";
+import { canWrite, projectAccess } from "@/lib/workspace-access";
 
 type RouteContext = {
     params: Promise<{
@@ -41,12 +42,15 @@ export async function GET(
             "list_secrets_for_api_token",
             {
                 p_team_id: auth.token.team_id,
+            p_token_hash: auth.token.hash,
                 p_project_id: projectId,
                 p_environment_id: environmentId,
             },
         );
 
         if (error) {
+        if (error.code === "P0429") return NextResponse.json({ error: "Token rate limit exceeded" }, { status: 429, headers: { "Retry-After": "60" } });
+        if (error.code === "42501") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
             console.error("Failed to list secrets:", error);
 
             return NextResponse.json(
@@ -195,35 +199,51 @@ export async function POST(
 ) {
     const { projectId, environmentId } = await params;
 
-    const auth = await authenticateApiToken(request);
+    const isTokenRequest = request.headers.get("authorization")?.startsWith("Bearer ");
+    const auth = isTokenRequest ? await authenticateApiToken(request) : null;
+    const access = !isTokenRequest ? await projectAccess(projectId, environmentId) : null;
 
-    if (!auth.token) {
+    if (auth && !auth.token) {
         return NextResponse.json(
             { error: auth.error },
             { status: 401 },
         );
     }
 
-    if (!auth.token.scopes.includes("secrets:write")) {
+    if (auth?.token && !auth.token.scopes.includes("secrets:write")) {
         return NextResponse.json(
             { error: "Insufficient token scope" },
             { status: 403 },
         );
     }
 
-    const body = await request.json();
+    if (access && access.status !== 200) {
+        return NextResponse.json({ error: "Unable to access this environment" }, { status: access.status });
+    }
+    if (access && !canWrite(access.role)) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
+    let body;
+    try { body = await request.json(); } catch {
+        return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return NextResponse.json({ error: "Expected a JSON object" }, { status: 400 });
+    }
 
     const {
         key,
         value,
         description = null,
-        is_required = false,
+        is_required,
     } = body;
 
     if (
         typeof key !== "string" ||
         typeof value !== "string" ||
-        !key.trim()
+        !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ||
+        (description !== null && typeof description !== "string") ||
+        (is_required !== undefined && typeof is_required !== "boolean")
     ) {
         return NextResponse.json(
             { error: "key and value are required" },
@@ -235,33 +255,35 @@ export async function POST(
 
     const encrypted = encryptSecret(value);
 
+    const rpcName = auth?.token ? "create_secret_for_api_token" : "create_secret_with_version";
     const { data, error } = await supabase.rpc(
-        "create_secret_for_api_token",
+        rpcName,
         {
-            p_team_id: auth.token.team_id,
-            p_project_id: projectId,
+            ...(auth?.token ? { p_team_id: auth.token.team_id, p_project_id: projectId, p_token_hash: auth.token.hash } : {}),
             p_environment_id: environmentId,
             p_key: key,
             p_description: description ?? null,
-            p_is_required: is_required ?? false,
+            p_is_required: auth?.token ? is_required ?? null : is_required ?? false,
             p_encrypted_value: encrypted.encryptedValue,
             p_encryption_version: encrypted.encryptionVersion,
-            p_created_by: auth.token.created_by,
+            p_created_by: auth?.token?.created_by ?? access?.userId,
         }
     );
 
     if (error) {
+        if (error.code === "P0429") return NextResponse.json({ error: "Token rate limit exceeded" }, { status: 429, headers: { "Retry-After": "60" } });
+        if (error.code === "42501") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         console.error("Failed to push secret:", error);
 
         return NextResponse.json(
-            { error: "Failed to push secret" },
-            { status: 500 },
+            { error: error.code === "23505" ? "A secret with this key already exists" : "Failed to create secret" },
+            { status: error.code === "23505" ? 409 : 500 },
         );
     }
 
     return NextResponse.json(
         {
-            secret: data?.[0] ?? null,
+            secret: auth?.token ? data?.[0] ?? null : data,
         },
         { status: 201 },
     );

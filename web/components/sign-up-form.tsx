@@ -1,120 +1,50 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { ArrowRight, UserPlus } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { safeRedirectPath } from "@/lib/auth-redirect";
 
-export function SignUpForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+export function SignUpForm() {
+  const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [repeatPassword, setRepeatPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
+  const [repeat, setRepeat] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const supabase = createClient();
-    setIsLoading(true);
-    setError(null);
-
-    if (password !== repeatPassword) {
-      setError("Passwords do not match");
-      setIsLoading(false);
-      return;
-    }
-
+  async function signUp(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError("");
+    if (password !== repeat) { setError("Passwords do not match."); return; }
+    setBusy(true);
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/protected`,
-        },
+      const next = safeRedirectPath(new URLSearchParams(window.location.search).get("redirect"), "/onboarding");
+      const { data, error } = await createClient().auth.signUp({
+        email: email.trim(), password,
+        options: { data: { full_name: name.trim() }, emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
       });
       if (error) throw error;
-      router.push("/auth/sign-up-success");
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      router.replace(data.session ? next : "/auth/sign-up-success"); router.refresh();
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Unable to create account."); }
+    finally { setBusy(false); }
+  }
 
-  return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Sign up</CardTitle>
-          <CardDescription>Create a new account</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSignUp}>
-            <div className="flex flex-col gap-6">
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="m@example.com"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
-                </div>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="repeat-password">Repeat Password</Label>
-                </div>
-                <Input
-                  id="repeat-password"
-                  type="password"
-                  required
-                  value={repeatPassword}
-                  onChange={(e) => setRepeatPassword(e.target.value)}
-                />
-              </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Creating an account..." : "Sign up"}
-              </Button>
-            </div>
-            <div className="mt-4 text-center text-sm">
-              Already have an account?{" "}
-              <Link href="/auth/login" className="underline underline-offset-4">
-                Login
-              </Link>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
-  );
+  return <div className="auth-form">
+    <div className="mb-7 flex h-12 w-12 items-center justify-center rounded-2xl border border-lime-300/20 bg-lime-300/10 text-lime-300"><UserPlus className="h-5 w-5" /></div>
+    <p className="eyebrow">Start building</p>
+    <h1 className="mt-3 text-4xl font-semibold tracking-[-.045em]">Create your workspace</h1>
+    <p className="mt-3 text-sm leading-6 text-muted-foreground">One account for your dashboard, CLI tokens, and team secrets.</p>
+    <form onSubmit={signUp} className="mt-9 space-y-5">
+      <label className="auth-label">Full name<input className="auth-input" type="text" autoComplete="name" placeholder="Your name" value={name} onChange={(event) => setName(event.target.value)} required /></label>
+      <label className="auth-label">Email address<input className="auth-input" type="email" autoComplete="email" placeholder="you@company.com" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+      <label className="auth-label">Password<input className="auth-input" type="password" autoComplete="new-password" placeholder="At least 8 characters" minLength={8} value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+      <label className="auth-label">Confirm password<input className="auth-input" type="password" autoComplete="new-password" placeholder="Repeat your password" minLength={8} value={repeat} onChange={(event) => setRepeat(event.target.value)} required /></label>
+      {error && <p role="alert" className="rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</p>}
+      <button type="submit" disabled={busy} className="btn-accent w-full">{busy ? "Creating account…" : "Create account"}<ArrowRight className="h-4 w-4" /></button>
+    </form>
+    <p className="mt-8 text-center text-sm text-muted-foreground">Already have an account? <Link href="/login" className="font-semibold text-foreground hover:text-lime-300">Sign in</Link></p>
+  </div>;
 }

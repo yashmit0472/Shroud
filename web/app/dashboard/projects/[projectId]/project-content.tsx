@@ -1,5 +1,11 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { environmentHealth } from "@/lib/environment-health";
+import { RequiredKeyManager } from "@/components/required-key-manager";
+import { canManage } from "@/lib/workspace-access";
+import { ProjectMemberManager } from "@/components/project-member-manager";
+import { DeleteProjectButton } from "@/components/delete-project-button";
 
 type ProjectContentProps = {
     params: Promise<{
@@ -73,7 +79,7 @@ export default async function ProjectContent({
     }
 
     if (!membership) {
-        notFound();
+        return <main className="mx-auto max-w-2xl space-y-5 py-12"><p className="eyebrow">Project access</p><h1 className="text-3xl font-semibold">Access to {project.name} is required</h1><p className="text-muted-foreground">You belong to this workspace, but your account has no role in this project. Ask a project owner or admin to add you.</p><Link href="/dashboard" className="btn-outline">Back to workspace</Link></main>;
     }
 
     const {
@@ -95,6 +101,27 @@ export default async function ProjectContent({
 
         throw new Error("Unable to load project environments.");
     }
+
+    const environmentIds = (environments ?? []).map((environment) => environment.id);
+    const { data: keyMetadata, error: keyError } = environmentIds.length
+        ? await supabase.from("secrets").select("environment_id, key, is_required").in("environment_id", environmentIds)
+        : { data: [], error: null };
+    const { data: requiredKeys, error: requiredError } = await supabase.from("required_keys").select("key").eq("project_id", project.id);
+    if (keyError || requiredError) {
+        console.error("FAILED TO CHECK ENVIRONMENT CONSISTENCY:", {
+            secrets: keyError && { message: keyError.message, code: keyError.code, details: keyError.details, hint: keyError.hint },
+            requiredKeys: requiredError && { message: requiredError.message, code: requiredError.code, details: requiredError.details, hint: requiredError.hint },
+        });
+        throw new Error("Unable to check environment consistency.");
+    }
+    const health = environmentHealth(environmentIds, keyMetadata ?? [], (requiredKeys ?? []).map((entry) => entry.key));
+    const { data: teamMembers, error: teamMembersError } = canManage(membership.role)
+        ? await supabase.rpc("list_team_members", { p_team_id: project.team_id, p_user_id: userId })
+        : { data: [], error: null };
+    const { data: projectMembers, error: projectMembersError } = canManage(membership.role)
+        ? await supabase.from("project_members").select("user_id,role").eq("project_id", project.id)
+        : { data: [], error: null };
+    if (teamMembersError || projectMembersError) throw new Error("Unable to load project access settings.");
 
     return (
         <main className="min-h-screen px-6 py-16">
@@ -148,6 +175,14 @@ export default async function ProjectContent({
                                             <h3 className="mt-2 text-lg font-semibold">
                                                 {environment.name}
                                             </h3>
+                                            {!!health.find((item) => item.id === environment.id)?.missingRequired.length && (
+                                                <p className="mt-3 rounded-md bg-destructive/10 p-2 text-xs text-destructive">
+                                                    Missing required: {health.find((item) => item.id === environment.id)?.missingRequired.join(", ")}
+                                                </p>
+                                            )}
+                                            {!!health.find((item) => item.id === environment.id)?.missingOptional.length && (
+                                                <p className="mt-2 text-xs text-muted-foreground">Other missing keys: {health.find((item) => item.id === environment.id)?.missingOptional.join(", ")}</p>
+                                            )}
 
                                             <p className="mt-2 text-sm leading-6 text-muted-foreground">
                                                 Manage secrets and configuration for this environment.
@@ -178,6 +213,8 @@ export default async function ProjectContent({
                     </div>
                 </div>
 
+                <div className="mt-12"><RequiredKeyManager projectId={project.id} keys={(requiredKeys ?? []).map((entry) => entry.key)} canEdit={canManage(membership.role)} /></div>
+                {canManage(membership.role) && <div className="mt-8"><ProjectMemberManager projectId={project.id} currentRole={membership.role} members={(teamMembers ?? []).map((member: { user_id: string; full_name: string | null }) => ({ ...member, projectRole: projectMembers?.find((entry) => entry.user_id === member.user_id)?.role ?? null }))} /></div>}
                 <div className="mt-12 rounded-2xl border bg-card p-6">
                     <h2 className="text-xl font-semibold">
                         Project details
@@ -205,6 +242,7 @@ export default async function ProjectContent({
                         </div>
                     </div>
                 </div>
+                {canManage(membership.role) && <DeleteProjectButton projectId={project.id} name={project.name} />}
             </div>
         </main>
     );

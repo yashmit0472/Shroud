@@ -36,11 +36,14 @@ export async function GET(
         "list_environments_for_api_token",
         {
             p_team_id: auth.token.team_id,
+            p_token_hash: auth.token.hash,
             p_project_id: projectId,
         },
     );
 
     if (error) {
+        if (error.code === "P0429") return NextResponse.json({ error: "Token rate limit exceeded" }, { status: 429, headers: { "Retry-After": "60" } });
+        if (error.code === "42501") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         console.error("Failed to list environments:", error);
 
         return NextResponse.json(

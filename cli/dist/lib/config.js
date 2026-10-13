@@ -5,7 +5,7 @@ const CONFIG_DIR = path.join(os.homedir(), ".shroud");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 function ensureConfigDir() {
     if (!fs.existsSync(CONFIG_DIR)) {
-        fs.mkdirSync(CONFIG_DIR, { recursive: true });
+        fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
     }
 }
 export function saveToken(token) {
@@ -13,12 +13,14 @@ export function saveToken(token) {
     const config = {
         token,
     };
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), { encoding: "utf8" });
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), { encoding: "utf8", mode: 0o600 });
     if (process.platform !== "win32") {
         fs.chmodSync(CONFIG_FILE, 0o600);
     }
 }
 export function getToken() {
+    if (process.env.SHROUD_TOKEN)
+        return process.env.SHROUD_TOKEN;
     if (!fs.existsSync(CONFIG_FILE)) {
         return null;
     }

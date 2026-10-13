@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
 import { Suspense } from "react";
 
 async function ErrorContent({
@@ -42,6 +43,7 @@ export default function Page({
               <Suspense>
                 <ErrorContent searchParams={searchParams} />
               </Suspense>
+              <Link href="/login" className="mt-4 inline-block text-sm underline">Try signing in again</Link>
             </CardContent>
           </Card>
         </div>

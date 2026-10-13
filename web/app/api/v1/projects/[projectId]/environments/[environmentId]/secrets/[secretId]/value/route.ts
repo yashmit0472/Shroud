@@ -39,6 +39,7 @@ export async function GET(
         "get_secret_value_for_api_token",
         {
             p_team_id: auth.token.team_id,
+            p_token_hash: auth.token.hash,
             p_project_id: projectId,
             p_environment_id: environmentId,
             p_secret_id: secretId,
@@ -46,6 +47,8 @@ export async function GET(
     );
 
     if (error) {
+        if (error.code === "P0429") return NextResponse.json({ error: "Token rate limit exceeded" }, { status: 429, headers: { "Retry-After": "60" } });
+        if (error.code === "42501") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         console.error("Failed to load secret value:", {
             message: error.message,
             code: error.code,

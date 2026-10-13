@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { canWrite } from "@/lib/workspace-access";
 
 type EnvironmentContentProps = {
     params: Promise<{
@@ -255,6 +256,8 @@ export default async function EnvironmentContent({
                                         <span className="font-mono text-sm text-muted-foreground">
                                             ••••••••
                                         </span>
+                                        {canWrite(membership.role) && <a href={`/dashboard/projects/${project.id}/environments/${environment.id}/secrets/${secret.id}/edit`} className="text-sm underline underline-offset-4">Edit</a>}
+                                        <a href={`/dashboard/projects/${project.id}/environments/${environment.id}/secrets/${secret.id}/history`} className="text-sm underline underline-offset-4">History</a>
                                     </div>
                                 </div>
                             ))}

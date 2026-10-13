@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import {
     Copy,
     Loader2,
@@ -44,13 +45,15 @@ export function TeamMembers({
     const [invitations, setInvitations] = useState<Invitation[]>([]);
     const [loading, setLoading] = useState(true);
     const [inviteOpen, setInviteOpen] = useState(false);
+    const [error, setError] = useState("");
 
     const canManage =
         currentUserRole === "owner" ||
         currentUserRole === "admin";
 
-    async function loadTeam() {
+    const loadTeam = useCallback(async () => {
         setLoading(true);
+        setError("");
 
         try {
             const [membersResponse, invitationsResponse] =
@@ -65,25 +68,29 @@ export function TeamMembers({
 
             const membersData =
                 await membersResponse.json();
+            if (!membersResponse.ok) throw new Error(membersData.error ?? "Unable to load team members.");
 
             setMembers(membersData.members ?? []);
 
             if (invitationsResponse) {
                 const invitationsData =
                     await invitationsResponse.json();
+                if (!invitationsResponse.ok) throw new Error(invitationsData.error ?? "Unable to load invitations.");
 
                 setInvitations(
                     invitationsData.invitations ?? [],
                 );
             }
+        } catch (failure) {
+            setError(failure instanceof Error ? failure.message : "Unable to load team.");
         } finally {
             setLoading(false);
         }
-    }
+    }, [teamId, canManage]);
 
     useEffect(() => {
         loadTeam();
-    }, [teamId]);
+    }, [loadTeam]);
 
     async function removeMember(userId: string) {
         const confirmed = window.confirm(
@@ -115,7 +122,7 @@ export function TeamMembers({
         );
     }
 
-    if (loading) {
+    if (loading && !inviteOpen) {
         return (
             <div className="flex min-h-[300px] items-center justify-center">
                 <Loader2 className="size-5 animate-spin text-muted-foreground" />
@@ -147,10 +154,13 @@ export function TeamMembers({
                         className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
                     >
                         <MailPlus className="size-4" />
-                        Invite member
+                        Create invitation link
                     </button>
                 )}
             </div>
+
+            {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+            {!canManage && <p className="text-sm text-muted-foreground">Only workspace owners and admins can generate invitations.</p>}
 
             {/* Members */}
             <section className="rounded-xl border bg-card">
@@ -181,11 +191,12 @@ export function TeamMembers({
                                 <div className="flex min-w-0 items-center gap-3">
                                     <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted">
                                         {member.avatar_url ? (
-                                            <img
+                                            <Image
                                                 src={
                                                     member.avatar_url
                                                 }
                                                 alt=""
+                                                width={36} height={36} unoptimized
                                                 className="size-full object-cover"
                                             />
                                         ) : (
@@ -252,7 +263,7 @@ export function TeamMembers({
                             </h2>
 
                             <p className="mt-1 text-xs text-muted-foreground">
-                                Invitations that haven't
+                                Invitations that haven&apos;t
                                 been accepted yet.
                             </p>
                         </div>
@@ -334,9 +345,12 @@ function InviteMemberModal({
         token: string;
         invite_code: string;
     } | null>(null);
+    const [error, setError] = useState("");
+    const [notice, setNotice] = useState("");
 
     async function createInvitation() {
         setLoading(true);
+        setError("");
 
         try {
             const response = await fetch(
@@ -357,11 +371,7 @@ function InviteMemberModal({
             const data = await response.json();
 
             if (!response.ok) {
-                window.alert(
-                    data.error ??
-                        "Failed to create invitation.",
-                );
-                return;
+                throw new Error(data.error ?? "Failed to create invitation.");
             }
 
             setResult({
@@ -371,13 +381,22 @@ function InviteMemberModal({
             });
 
             await onCreated();
+        } catch (failure) {
+            setError(failure instanceof Error ? failure.message : "Failed to create invitation.");
         } finally {
             setLoading(false);
         }
     }
 
     async function copy(value: string) {
-        await navigator.clipboard.writeText(value);
+        setError("");
+        setNotice("");
+        try {
+            await navigator.clipboard.writeText(value);
+            setNotice("Copied to clipboard.");
+        } catch {
+            setError("Copy failed. Select and copy the value manually.");
+        }
     }
 
     const inviteLink =
@@ -386,10 +405,10 @@ function InviteMemberModal({
             : "";
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-md rounded-xl border bg-background shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+            <div role="dialog" aria-modal="true" aria-labelledby="invitation-title" className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border bg-background shadow-xl">
                 <div className="border-b px-5 py-4">
-                    <h2 className="font-semibold">
+                    <h2 id="invitation-title" className="font-semibold">
                         Invite a team member
                     </h2>
 
@@ -398,6 +417,9 @@ function InviteMemberModal({
                         teammate.
                     </p>
                 </div>
+
+                {error && <p role="alert" className="px-5 pt-4 text-sm text-red-300">{error}</p>}
+                {notice && <p role="status" className="px-5 pt-4 text-sm text-lime-300">{notice}</p>}
 
                 {!result ? (
                     <>
@@ -494,7 +516,7 @@ function InviteMemberModal({
                             </p>
 
                             <p className="mt-1 text-xs text-muted-foreground">
-                                Copy the token now. It won't
+                                Copy the token now. It won&apos;t
                                 be shown again.
                             </p>
                         </div>

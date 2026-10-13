@@ -1,3 +1,5 @@
+import { JoinTeamForm } from "./join-team-form";
+
 export default function JoinTeamPage() {
   return (
     <main className="min-h-screen px-6 py-16">
@@ -11,7 +13,7 @@ export default function JoinTeamPage() {
         </p>
 
         <div className="mt-8 rounded-2xl border border-border p-6">
-          Invite code and link flow coming next.
+          <JoinTeamForm />
         </div>
       </div>
     </main>
