@@ -12,11 +12,14 @@ jobs:
           cache-dependency-path: |
             web/package-lock.json
             cli/package-lock.json
+      - name: Validate favicon format
+        run: node tests/brand-assets.mjs
       - run: npm ci
         working-directory: web
       - run: npm test && npm run typecheck && npm run lint
         working-directory: web
-      - run: npm run build
+      - name: Build web (Webpack, matching Vercel)
+        run: npm run build -- --webpack
         working-directory: web
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
