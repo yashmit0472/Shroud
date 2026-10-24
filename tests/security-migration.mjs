@@ -11,7 +11,7 @@ const movePattern = /ALTER FUNCTION public\.(\w+)\(([^;]+)\) SET SCHEMA shroud_p
 for (const match of migration.matchAll(movePattern)) {
   const name=match[1];
   if (["create_secret_with_version","create_secret_version"].includes(name)) continue;
-  const createPattern = new RegExp("CREATE FUNCTION public\\."+name+"\\(([^\\n]+)\\)\\s*(?:\\n)?RETURNS (TABLE\\([^\\n]+\\)|boolean)");
+  const createPattern = new RegExp("CREATE(?: OR REPLACE)? FUNCTION public\\."+name+"\\(([^\\n]+)\\)\\s*(?:\\n)?RETURNS (TABLE\\([^\\n]+\\)|boolean)");
   const signature = migration.match(createPattern);
   if (!signature) throw new Error("Missing fixture contract for " + name);
   const args = signature[1].replace(/, p_token_hash text DEFAULT NULL$/, "");
@@ -42,8 +42,14 @@ const asUser = async (id, role="authenticated") => {
   await db.exec("SET ROLE "+role);
 };
 let checks=0;
+async function inspect(sql,params=[]) {
+  const role=(await db.query("SELECT current_user AS name")).rows[0].name;
+  await db.exec("RESET ROLE");
+  try { return await db.query(sql,params); }
+  finally { if(role==="authenticated"||role==="anon") await db.exec("SET ROLE "+role); }
+}
 async function rejects(sql,params=[]) {
-  await assert.rejects(()=>db.query(sql,params)); checks++;
+  await assert.rejects(()=>db.query(sql,params), "Expected access/validation denial: "+sql); checks++;
 }
 await asUser(null,"anon");
 await rejects("SELECT shroud_create_project($1,'Blocked',null)",[team]);
@@ -67,9 +73,9 @@ const history=await db.query("SELECT * FROM shroud_secret_history($1,$2,$3)",[pr
 assert.deepEqual(history.rows.map(v=>v.version),[2,1]);
 assert.equal("encrypted_value" in history.rows[0],false); checks+=2;
 await db.query("SELECT shroud_update_secret($1,$2,$3,'Metadata only',true,null,1,true,true)",[project,env,secret]);
-assert.equal((await db.query("SELECT count(*)::int n FROM secret_versions WHERE secret_id=$1",[secret])).rows[0].n,2); checks++;
+assert.equal((await inspect("SELECT count(*)::int n FROM secret_versions WHERE secret_id=$1",[secret])).rows[0].n,2); checks++;
 await rejects("SELECT shroud_update_secret($1,$2,$3,'Should roll back',null,'must-not-persist',1,true,true)",[project,env,secret]);
-assert.equal((await db.query("SELECT count(*)::int n FROM secret_versions WHERE secret_id=$1",[secret])).rows[0].n,2);
+assert.equal((await inspect("SELECT count(*)::int n FROM secret_versions WHERE secret_id=$1",[secret])).rows[0].n,2);
 assert.equal((await db.query("SELECT description FROM secrets WHERE id=$1",[secret])).rows[0].description,"Metadata only"); checks+=2;
 await db.query("SELECT shroud_set_project_member($1,$2,'viewer')",[project,viewer]);
 await rejects("SELECT shroud_set_project_member($1,$2,'owner')",[project,viewer]);
@@ -150,9 +156,9 @@ assert.equal((await db.query("SELECT count(*)::int n FROM secrets WHERE key='AAA
 assert.ok(!JSON.stringify((await db.query("SELECT metadata FROM audit_logs")).rows).includes('browser-cipher')); checks++;
 await asUser(owner);
 assert.equal((await db.query("SELECT shroud_delete_secret($1,$2,$3) AS ok",[project,env,secret])).rows[0].ok,true); checks++;
-assert.equal((await db.query("SELECT count(*)::int n FROM secret_versions WHERE secret_id=$1",[secret])).rows[0].n,0); checks++;
+assert.equal((await inspect("SELECT count(*)::int n FROM secret_versions WHERE secret_id=$1",[secret])).rows[0].n,0); checks++;
 await db.query("INSERT INTO required_keys(project_id,key) VALUES($1,'KEY')",[project]);
-await db.query("INSERT INTO project_invitations(project_id) VALUES($1)",[project]);
+await inspect("INSERT INTO project_invitations(project_id) VALUES($1)",[project]);
 assert.equal((await db.query("SELECT shroud_delete_project($1) AS ok",[project])).rows[0].ok,true); checks++;
 assert.equal((await db.query("SELECT count(*)::int n FROM projects WHERE id=$1",[project])).rows[0].n,0); checks++;
 assert.equal((await db.query("SELECT count(*)::int n FROM audit_logs WHERE project_id=$1 OR environment_id=$2",[project,env])).rows[0].n,0); checks++;

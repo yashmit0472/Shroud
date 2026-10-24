@@ -10,8 +10,10 @@ export const pushCommand = new Command("push")
   .option("-p, --project <id-or-slug>", "Project ID or slug")
   .option("-e, --environment <id-or-slug>", "Environment ID, slug, or type")
   .option("-f, --file <path>", "Input file", ".env")
-  .action(async (options: SelectionOptions & { file: string }) => {
+  .option("--confirm-production", "Confirm Production writes (required for Production)")
+  .action(async (options: SelectionOptions & { file: string;confirmProduction?:boolean }) => {
     let pushed = 0;
+    let queued = 0;
     try {
       const token = getToken();
       if (!token) throw new Error("Not logged in. Run shroud login or set SHROUD_TOKEN.");
@@ -19,10 +21,12 @@ export const pushCommand = new Command("push")
       if (!variables.length) throw new Error("No environment variables found in the input file.");
       const { projectId, environmentId } = await selectEnvironment(token, options);
       for (const variable of variables) {
-        const result = await createSecret(token, projectId, environmentId, variable);
+        const result = await createSecret(token, projectId, environmentId, variable, options.confirmProduction===true);
+        if(result.pending){queued++;console.log(variable.key+" → awaiting Production approval ("+result.request_id+")");continue;}
         pushed++;
         console.log(variable.key + " → version " + (result.secret?.version ?? 1));
       }
       console.log("Successfully pushed " + pushed + " environment variables.");
+      if(queued)console.log(queued+" variables are awaiting approval in project Activity.");
     } catch (error) { console.error(error instanceof Error ? error.message : "Failed to push secrets"); if (pushed) console.error(pushed + " variables were already pushed before this failure."); process.exitCode = 1; }
   });

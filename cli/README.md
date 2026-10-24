@@ -56,6 +56,12 @@ shroud run -p my-api -e development -- npm run dev
 
 `pull` refuses to overwrite an existing file unless you confirm interactively or pass `--force`. `run` does not create a file and does not pass `SHROUD_TOKEN` to its child process. Do not commit pulled .env files; add them to `.gitignore`.
 
+Production push requires `--confirm-production`. If independent approval is enabled, the command reports queued requests; a different owner/admin approves them in the project's Activity view. Desktop push sends each variable separately, so a failure can leave earlier variables saved.
+
+```bash
+shroud push -p my-api -e production -f .env.production --confirm-production
+```
+
 ## CI example
 
 ```bash

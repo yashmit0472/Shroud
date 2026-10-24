@@ -17,8 +17,8 @@ export default function CreateTeamPage() {
             New workspace
           </p>
 
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight">
-            Create your team
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+            Create your workspace
           </h1>
 
           <p className="mt-4 text-muted-foreground">

@@ -10,6 +10,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: "Shroud | Secrets in sync",
   description: "Manage encrypted environment secrets across your team, terminal, and deployments.",
+  icons: { icon: [{url:"/brand/shroud-icon-32.png",type:"image/png",sizes:"32x32"}], apple:"/apple-icon.png" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -10,7 +10,7 @@ function DesktopCliGuide() {
       <div className="surface-card p-5"><Terminal className="h-5 w-5 text-lime-300" /><h3 className="mt-3 !text-base">3. Sync & run</h3><p className="!mt-1 text-sm">Pull a .env file, push updates, or inject variables into a process.</p></div>
     </div>
     <h2 id="cli-install">Install the CLI</h2>
-    <p>Requires Node.js 20 or newer. The CLI is packaged with this app; it is not yet published to the npm registry.</p>
+    <p>Requires Node.js 22.12 or newer. The CLI is packaged with this app; it is not yet published to the npm registry.</p>
     <a className="btn-accent mt-5" href="/downloads/shroud-cli-1.0.0.tgz" download><Download className="h-4 w-4" /> Download CLI package</a>
     <CommandBlock label="install from downloaded file" code={"npm install -g ./shroud-cli-1.0.0.tgz\nshroud --help"} />
     <p>If you have this repository locally, you can instead run <code>npm install -g ./cli</code> from its root. On a hosted Shroud deployment, set <code>SHROUD_API_URL</code> to your Shroud web URL. The CLI defaults to <code>http://localhost:3000</code>.</p>
@@ -57,6 +57,7 @@ export function CliGuide() {
     <p>Push saves the variable name and value you type, with no file picker. Put values containing spaces in quotes. Values are literal: Shroud does not expand variables or execute shell syntax. Existing variables receive a new version; descriptions, required flags, and other variables stay unchanged.</p>
     <p>Pull displays one variable as <code>KEY=&quot;value&quot;</code>. Use <code>shroud secrets --values</code> to see every value in the active environment. Push values are hidden in command output and excluded from Arrow Up/Down recall. Revealed values are kept only in the current page and disappear on context changes, <strong>Hide values</strong>, or <code>clear</code>.</p>
     <p>Project viewers can read values. Developers, admins, and owners can add and update variables.</p>
+    <h3>Production writes</h3><p>Production writes open a confirmation dialog. If the project requires independent approval, the terminal reports a pending request instead of saving immediately. A different project owner/admin approves it in Activity. The optional desktop CLI uses <code>--confirm-production</code> on push.</p>
     <h3>Running local apps</h3><p>The browser terminal manages Shroud variables. It cannot start programs on your computer or inject values into a local process. The optional desktop CLI supports .env file sync, <code>shroud run</code>, and CI workflows.</p>
     <details className="surface-card mt-8 p-5"><summary className="cursor-pointer text-sm font-semibold text-lime-300">Optional desktop CLI and CI instructions</summary><div className="mt-6"><DesktopCliGuide /></div></details>
   </div>;

@@ -40,13 +40,13 @@ async function OnboardingContent() {
 
     return (
         <main className="min-h-screen px-6 py-16">
-            <div className="mx-auto flex min-h-[70vh] max-w-5xl flex-col justify-center">
+            <div className="mx-auto flex min-h-[65vh] max-w-3xl flex-col justify-center">
                 <div className="max-w-2xl">
                     <p className="text-sm font-medium text-muted-foreground">
                         Welcome to Shroud
                     </p>
 
-                    <h1 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
+                    <h1 className="mt-3 text-3xl font-semibold tracking-tight">
                         Let&apos;s get your workspace ready.
                     </h1>
 
@@ -58,7 +58,7 @@ async function OnboardingContent() {
                 <div className="mt-12 grid gap-5 md:grid-cols-2">
                     <a
                         href="/onboarding/create-team"
-                        className="group rounded-2xl border border-border bg-card p-7 transition-all hover:-translate-y-0.5 hover:bg-muted/40"
+                        className="group rounded-md border border-border bg-card p-7 transition-all hover:bg-muted/40"
                     >
                         <div className="flex items-start justify-between">
                             <div>
@@ -83,12 +83,12 @@ async function OnboardingContent() {
 
                     <a
                         href="/onboarding/join-team"
-                        className="group rounded-2xl border border-border bg-card p-7 transition-all hover:-translate-y-0.5 hover:bg-muted/40"
+                        className="group rounded-md border border-border bg-card p-7 transition-all hover:bg-muted/40"
                     >
                         <div className="flex items-start justify-between">
                             <div>
                                 <h2 className="text-lg font-semibold">
-                                    Join a team
+                                    Join a workspace
                                 </h2>
 
                                 <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
@@ -116,7 +116,7 @@ export default function OnboardingPage() {
         <Suspense
             fallback={
                 <main className="min-h-screen px-6 py-16">
-                    <div className="mx-auto flex min-h-[70vh] max-w-5xl items-center justify-center">
+                    <div className="mx-auto flex min-h-[65vh] max-w-3xl items-center justify-center">
                         <p className="text-sm text-muted-foreground">
                             Loading your workspace...
                         </p>

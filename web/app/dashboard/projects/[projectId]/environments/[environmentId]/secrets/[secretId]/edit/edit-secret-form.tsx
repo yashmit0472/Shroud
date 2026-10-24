@@ -1,5 +1,6 @@
 "use client";
 
+import { useSecretMutation } from "@/components/use-secret-mutation";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -26,6 +27,7 @@ export function EditSecretForm({
   initialRequired,
 }: Props) {
   const router = useRouter();
+  const mutation=useSecretMutation();
 
   const key = initialKey;
   const [value, setValue] = useState("");
@@ -47,7 +49,7 @@ export function EditSecretForm({
     setLoading(true);
 
     try {
-      const response = await fetch(
+      const response = await mutation.request(
         `/api/v1/projects/${projectId}/environments/${environmentId}/secrets/${secretId}`,
         {
           method: "PATCH",
@@ -69,6 +71,7 @@ export function EditSecretForm({
         throw new Error(data.error || "Failed to update environment variable.");
       }
 
+      if(data.pending){setValue("");router.push(`/dashboard/projects/${projectId}?tab=activity`);router.refresh();return;}
       router.push(
         `/dashboard/projects/${projectId}/environments/${environmentId}`,
       );
@@ -86,7 +89,7 @@ export function EditSecretForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <>{mutation.confirmation}<form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
         <Label htmlFor="key">Variable name</Label>
 
@@ -167,6 +170,6 @@ export function EditSecretForm({
           {loading ? "Updating..." : "Update variable"}
         </Button>
       </div>
-    </form>
+    </form></>
   );
 }

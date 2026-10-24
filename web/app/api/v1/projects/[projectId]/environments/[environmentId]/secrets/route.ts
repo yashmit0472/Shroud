@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { isActiveWorkspaceProject } from "@/lib/workspace-context";
 import { createClient } from "@/lib/supabase/server";
 import { authenticateApiToken } from "@/lib/api-auth";
-import { encryptSecret } from "@/lib/crypto";
+import { applySecretChanges } from "@/lib/secret-changes";
 import { canWrite, projectAccess } from "@/lib/workspace-access";
 
 type RouteContext = {
@@ -193,98 +194,18 @@ export async function GET(
     });
 }
 
-export async function POST(
-    request: Request,
-    { params }: RouteContext,
-) {
-    const { projectId, environmentId } = await params;
-
-    const isTokenRequest = request.headers.get("authorization")?.startsWith("Bearer ");
-    const auth = isTokenRequest ? await authenticateApiToken(request) : null;
-    const access = !isTokenRequest ? await projectAccess(projectId, environmentId) : null;
-
-    if (auth && !auth.token) {
-        return NextResponse.json(
-            { error: auth.error },
-            { status: 401 },
-        );
-    }
-
-    if (auth?.token && !auth.token.scopes.includes("secrets:write")) {
-        return NextResponse.json(
-            { error: "Insufficient token scope" },
-            { status: 403 },
-        );
-    }
-
-    if (access && access.status !== 200) {
-        return NextResponse.json({ error: "Unable to access this environment" }, { status: access.status });
-    }
-    if (access && !canWrite(access.role)) {
-        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
-    }
-    let body;
-    try { body = await request.json(); } catch {
-        return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-    }
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-        return NextResponse.json({ error: "Expected a JSON object" }, { status: 400 });
-    }
-
-    const {
-        key,
-        value,
-        description = null,
-        is_required,
-    } = body;
-
-    if (
-        typeof key !== "string" ||
-        typeof value !== "string" ||
-        !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) ||
-        (description !== null && typeof description !== "string") ||
-        (is_required !== undefined && typeof is_required !== "boolean")
-    ) {
-        return NextResponse.json(
-            { error: "key and value are required" },
-            { status: 400 },
-        );
-    }
-
-    const supabase = await createClient();
-
-    const encrypted = encryptSecret(value);
-
-    const rpcName = auth?.token ? "create_secret_for_api_token" : "create_secret_with_version";
-    const { data, error } = await supabase.rpc(
-        rpcName,
-        {
-            ...(auth?.token ? { p_team_id: auth.token.team_id, p_project_id: projectId, p_token_hash: auth.token.hash } : {}),
-            p_environment_id: environmentId,
-            p_key: key,
-            p_description: description ?? null,
-            p_is_required: auth?.token ? is_required ?? null : is_required ?? false,
-            p_encrypted_value: encrypted.encryptedValue,
-            p_encryption_version: encrypted.encryptionVersion,
-            p_created_by: auth?.token?.created_by ?? access?.userId,
-        }
-    );
-
-    if (error) {
-        if (error.code === "P0429") return NextResponse.json({ error: "Token rate limit exceeded" }, { status: 429, headers: { "Retry-After": "60" } });
-        if (error.code === "42501") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-        console.error("Failed to push secret:", error);
-
-        return NextResponse.json(
-            { error: error.code === "23505" ? "A secret with this key already exists" : "Failed to create secret" },
-            { status: error.code === "23505" ? 409 : 500 },
-        );
-    }
-
-    return NextResponse.json(
-        {
-            secret: auth?.token ? data?.[0] ?? null : data,
-        },
-        { status: 201 },
-    );
+export async function POST(request:Request,{params}:RouteContext){
+  const {projectId,environmentId}=await params;
+  const isToken=request.headers.get("authorization")?.startsWith("Bearer ");
+  const auth=isToken?await authenticateApiToken(request):null;
+  const access=!isToken?await projectAccess(projectId,environmentId):null;
+  if(auth&&!auth.token)return NextResponse.json({error:"Invalid API token."},{status:401});
+  if(auth?.token&&!auth.token.scopes.includes("secrets:write"))return NextResponse.json({error:"Write scope is required."},{status:403});
+  if(!isToken&&!await isActiveWorkspaceProject(projectId))return NextResponse.json({error:"Select this project's workspace first."},{status:403});
+  if(access&&(access.status!==200||!canWrite(access.role)))return NextResponse.json({error:"Project write access is required."},{status:access.status===200?403:access.status});
+  let body;try{body=await request.json();}catch{return NextResponse.json({error:"Invalid JSON body."},{status:400});}
+  if(!body||typeof body.key!=="string"||typeof body.value!=="string"||body.value.includes("\0")||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(body.key)||(body.description!==undefined&&body.description!==null&&typeof body.description!=="string")||(body.is_required!==undefined&&typeof body.is_required!=="boolean"))return NextResponse.json({error:"Enter a valid key, value, and metadata."},{status:400});
+  const result=await applySecretChanges(projectId,environmentId,[{key:body.key,value:body.value,action:auth?.token?"upsert":"create",...(body.description!==undefined?{description:body.description}:{}),...(body.is_required!==undefined?{is_required:body.is_required}:{})}],body.confirm_production===true,auth?.token?.hash);
+  if(result.error)return NextResponse.json({error:result.error,code:result.code},{status:result.status});
+  return NextResponse.json(result.data?.pending?result.data:{secret:{...result.data?.changes?.[0],description:body.description??null,is_required:body.is_required??false},pending:false},{status:result.data?.pending?202:201});
 }

@@ -1,7 +1,8 @@
 "use client";
 
+import { useSecretMutation } from "@/components/use-secret-mutation";
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
-import { ArrowRight, EyeOff, Loader2, ShieldCheck, Terminal } from "lucide-react";
+import { ArrowRight, EyeOff, Loader2 } from "lucide-react";
 import { assertBrowserContext, browserCommandDisplay, parseBrowserCommand, terminalHelp } from "@/lib/browser-cli";
 import { DarkSelect } from "@/components/dark-select";
 
@@ -25,6 +26,7 @@ function resolveItem(items: Item[], value: string, label: string) {
 }
 
 export function BrowserTerminal() {
+  const mutation=useSecretMutation();
   const [projects, setProjects] = useState<Item[]>([]);
   const [environments, setEnvironments] = useState<Item[]>([]);
   const [projectId, setProjectId] = useState("");
@@ -35,6 +37,7 @@ export function BrowserTerminal() {
   const [historyPosition, setHistoryPosition] = useState(-1);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [connected, setConnected] = useState(false);
   const commandInput = useRef<HTMLInputElement>(null);
   const log = useRef<HTMLDivElement>(null);
   const currentProject = projects.find((item) => item.id === projectId);
@@ -50,7 +53,7 @@ export function BrowserTerminal() {
   useEffect(() => {
     let cancelled = false;
     query("projects").then((data) => {
-      if (!cancelled) setProjects(data.items);
+      if (!cancelled) { setProjects(data.items); setConnected(true); }
     }).catch((failure) => {
       if (!cancelled) setOutput((entries) => [...entries, { text: failure.message, error: true }]);
     }).finally(() => { if (!cancelled) setLoading(false); });
@@ -68,7 +71,8 @@ export function BrowserTerminal() {
     return () => { cancelled = true; };
   }, [projectId]);
 
-  useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" }); }, [output, busy]);
+  useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" }); }, [output, busy]);
+  useEffect(() => { const hide = () => setOutput(entries => entries.filter(entry => !entry.sensitive)); const visibility = () => { if (document.hidden) hide(); }; window.addEventListener("blur", hide); document.addEventListener("visibilitychange", visibility); return () => { window.removeEventListener("blur", hide); document.removeEventListener("visibilitychange", visibility); }; }, []);
   useEffect(() => { if (!busy) commandInput.current?.focus(); }, [busy]);
 
   async function execute(commandText: string) {
@@ -113,13 +117,14 @@ export function BrowserTerminal() {
         return;
       }
       if (command.action === "push") {
-        const response = await fetch("/api/browser-cli", {
+        const response = await mutation.request("/api/browser-cli", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ project: projectId, environment: environmentId, key: command.key, value: command.value }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Unable to save variable.");
         hideValues();
+        if(data.pending){append({text:"Production approval requested. A different project owner or admin can review it in Activity.",context});return;}
         append({ text: "Saved " + data.key + " in " + currentProject?.name + " / " + currentEnvironment?.name + ". Existing variables receive a new version.", context });
         return;
       }
@@ -142,21 +147,17 @@ export function BrowserTerminal() {
 
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); void execute(input); }
 
-  return <div className="space-y-5">
-    <div className="surface-card grid gap-4 p-5 sm:grid-cols-2">
-      <DarkSelect label="Current project" value={projectId} onChange={(value) => void execute("shroud use " + (value || ".."))} disabled={loading || busy} placeholder={loading ? "Loading projects..." : "No project — choose one to enter"} allowEmpty options={projects.map((item) => ({ value: item.id, label: item.name }))} />
-      <DarkSelect label="Current environment" value={environmentId} onChange={(value) => void execute("shroud env " + value)} disabled={!projectId || !environments.length || busy} placeholder="Choose an environment to enter" options={environments.map((item) => ({ value: item.id, label: item.name }))} />
+  return <>{mutation.confirmation}<div>
+    <div className="mb-4 grid max-w-xl gap-3 sm:grid-cols-2">
+      <DarkSelect label="Project context" value={projectId} onChange={value=>void execute("shroud use "+(value||".."))} disabled={loading||busy} placeholder={loading?"Loading projects…":"Enter a project"} allowEmpty options={projects.map(item=>({value:item.id,label:item.name}))}/>
+      <DarkSelect label="Environment" value={environmentId} onChange={value=>void execute("shroud env "+value)} disabled={!projectId||!environments.length||busy} placeholder="Enter an environment" options={environments.map(item=>({value:item.id,label:item.name}))}/>
     </div>
-    {!loading && !projects.length && <p className="text-sm text-muted-foreground">No accessible projects yet. Create a project or ask your team admin for project access.</p>}
-    <div className="overflow-hidden rounded-2xl border border-white/15 bg-[#080e16] shadow-2xl">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-white/[.03] px-5 py-4"><span className="flex items-center gap-2 text-sm font-semibold"><Terminal className="h-4 w-4 text-lime-300" /> Shroud terminal</span><span className="flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="h-3.5 w-3.5 text-lime-300" /> {currentProject ? currentProject.name + " / " + (currentEnvironment?.name ?? "select environment") : "No project entered"}</span></div>
-      <div ref={log} role="log" aria-live="polite" aria-label="Terminal output" className="h-[380px] space-y-5 overflow-y-auto p-5 font-mono text-xs leading-6 sm:p-7 sm:text-sm">
-        {output.map((entry, index) => <div key={index}>{entry.command && <p className="break-all text-foreground"><span className="text-lime-300">shroud@{entry.context} $ </span>{entry.command}</p>}{entry.sensitive && <p className="mb-1 text-[10px] text-amber-300">Revealed values — {entry.context}</p>}{entry.text && <pre className={"whitespace-pre-wrap break-words font-mono " + (entry.error ? "text-red-300" : entry.sensitive ? "text-lime-200" : "text-slate-300")}>{entry.text}</pre>}</div>)}
-        {busy && <p className="flex items-center gap-2 text-lime-300"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Running...</p>}
-      </div>
-      <form onSubmit={submit} className="flex items-center gap-3 border-t border-white/10 px-5 py-4 sm:px-7"><span aria-hidden="true" className="max-w-[40%] truncate font-mono text-xs text-lime-300">{context} $</span><input ref={commandInput} aria-label="Terminal command" className="min-w-0 flex-1 bg-transparent font-mono text-sm outline-none placeholder:text-slate-600" placeholder={projectId ? 'shroud push API_KEY "value"' : "shroud use <project>"} value={input} onChange={(event) => { setInput(event.target.value); setHistoryPosition(-1); }} onKeyDown={recall} autoComplete="off" spellCheck={false} maxLength={65536} disabled={busy} /><button type="submit" aria-label="Run command" disabled={busy || !input.trim()} className="rounded-lg bg-lime-300/10 p-2 text-lime-300 disabled:opacity-30"><ArrowRight className="h-4 w-4" /></button></form>
-    </div>
-    <div className="flex flex-wrap gap-2">{[{ command: "help", label: "Help" }, { command: "shroud projects", label: "Projects" }, { command: "shroud environments", label: "Environments" }, { command: "shroud secrets", label: "List keys" }, { command: "shroud secrets --values", label: "Show values" }].map(({ command, label }) => <button key={command} className="btn-outline min-h-0 px-3 py-2 text-xs" disabled={busy} onClick={() => void execute(command)}>{label}</button>)}<button className="btn-outline min-h-0 px-3 py-2 text-xs" disabled={busy} onClick={hideValues}><EyeOff className="h-3.5 w-3.5" />Hide values</button><button className="ml-auto text-xs text-muted-foreground hover:text-foreground" disabled={busy} onClick={() => void execute("clear")}>Clear terminal</button></div>
-    <p className="text-xs leading-5 text-muted-foreground">Enter a project and environment before accessing variables. Pull reveals a value; push saves the name and value you type. Push values are excluded from command history. Revealed values disappear when you switch context, hide values, clear the terminal, or leave this page.</p>
-  </div>;
+    {!loading&&!projects.length&&<p className="mb-4 text-xs text-muted-foreground">No accessible projects. Create a project or request project membership.</p>}
+    <div className="terminal-layout"><div className="terminal-main">
+      <div className="terminal-status"><span className="flex min-w-0 items-center gap-3"><span className={connected?"text-primary":"text-muted-foreground"}>{loading?"Connecting…":connected?"● Connected":"○ Unavailable"}</span><span className="truncate text-muted-foreground">{currentProject?currentProject.name+" / "+(currentEnvironment?.name??"No environment"):"Workspace / No project"}</span></span><button type="button" className="text-[10px] text-muted-foreground hover:text-foreground" disabled={busy} onClick={()=>void execute("clear")}>Clear</button></div>
+      <div ref={log} role="log" aria-live="polite" aria-label="Terminal output" className="terminal-log space-y-4">{output.map((entry,index)=><div key={index}>{entry.command&&<p className="break-all text-foreground"><span className="text-primary">shroud@{entry.context} $ </span>{entry.command}</p>}{entry.sensitive&&<p className="mb-1 text-[10px] text-amber-300">Revealed values · {entry.context}</p>}{entry.text&&<pre className={"whitespace-pre-wrap break-words font-mono "+(entry.error?"text-destructive":entry.sensitive?"text-[#d9e8b4]":"text-[#aaa79d]")}>{entry.text}</pre>}</div>)}{busy&&<p className="flex items-center gap-2 text-muted-foreground"><Loader2 size={12} className="animate-spin"/>Running…</p>}</div>
+      <form onSubmit={submit} className="flex items-center gap-3 border-t border-border px-4 py-3"><span aria-hidden="true" className="max-w-[35%] truncate font-mono text-[11px] text-primary">{context} $</span><input ref={commandInput} aria-label="Terminal command" className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-muted-foreground" placeholder={projectId?'shroud push API_KEY "value"':"shroud use <project>"} value={input} onChange={event=>{setInput(event.target.value);setHistoryPosition(-1);}} onKeyDown={recall} autoComplete="off" spellCheck={false} maxLength={65536} disabled={busy}/><button type="submit" aria-label="Run command" disabled={busy||!input.trim()} className="icon-button"><ArrowRight size={13}/></button></form>
+    </div><aside className="terminal-quick"><h2>Quick commands</h2>{[{name:"projects",description:"List projects",command:"shroud projects"},{name:"env",description:"List environments",command:"shroud environments"},{name:"secrets",description:"List keys",command:"shroud secrets"},{name:"pull",description:"Read one variable",command:"shroud pull ",edit:true},{name:"push",description:"Add / update variable",command:"shroud push ",edit:true},{name:"whoami",description:"Current account",command:"shroud whoami"},{name:"help",description:"Command reference",command:"help"}].map(item=><button type="button" key={item.name} disabled={busy} onClick={()=>{if(item.edit){setInput(item.command);commandInput.current?.focus();}else void execute(item.command);}}>{item.name}<small>{item.description}</small></button>)}<button type="button" disabled={busy} onClick={hideValues}><span className="flex items-center gap-2"><EyeOff size={12}/>Hide values</span><small>Remove revealed output</small></button></aside></div>
+    <p className="mt-3 text-[10px] text-muted-foreground">Literal commands · no system shell · pushes excluded from command recall</p>
+  </div></>;
 }

@@ -1,0 +1,2 @@
+"use client";
+export default function ErrorPage({reset}:{error:Error&{digest?:string};reset:()=>void}) { return <main className="py-10"><div className="empty-state"><strong>This page could not be loaded.</strong><p>Check your connection and try again. If the issue continues, verify the project&apos;s database setup.</p><button type="button" className="btn-outline" onClick={reset}>Try again</button></div></main>; }

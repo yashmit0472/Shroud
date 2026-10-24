@@ -37,10 +37,10 @@ export async function getSecrets(token, projectId, environmentId) {
 export async function getSecretValue(token, projectId, environmentId, secretId) {
     return request(`/api/v1/projects/${projectId}/environments/${environmentId}/secrets/${secretId}/value`, token);
 }
-export async function createSecret(token, projectId, environmentId, secret) {
+export async function createSecret(token, projectId, environmentId, secret, confirmProduction = false) {
     return request(`/api/v1/projects/${projectId}/environments/${environmentId}/secrets`, token, {
         method: "POST",
-        body: JSON.stringify(secret),
+        body: JSON.stringify({ ...secret, confirm_production: confirmProduction }),
     });
 }
 export async function getAllSecretValues(token, projectId, environmentId) {

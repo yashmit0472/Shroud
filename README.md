@@ -14,6 +14,12 @@ The website is the main interface. An optional desktop CLI supports local `.env`
 - A browser terminal for reading and updating individual variables.
 - API tokens with read/write scopes, expiration, and revocation.
 - Workspace audit logs and in-app documentation.
+- Search variable names across accessible projects; plaintext never appears in search.
+- Rotation reminders with optional recurring schedules.
+- Paste-based bulk .env import with a review and atomic save; explicit plaintext export.
+- Keyed fingerprints and value drift comparison across environments.
+- Production confirmation and optional approval by a different project owner/admin.
+- Vercel configuration sync with a preview and encrypted connection credentials.
 
 ## Tech stack
 
@@ -45,25 +51,20 @@ Shroud/
 ### 1. Prerequisites
 
 - Node.js **22.12 or newer** and npm.
-- A Supabase project containing the existing Shroud base schema.
+- A Supabase project, either fresh or with the existing Shroud schema.
 - Access to that project's SQL Editor and Authentication settings.
 
-The migrations in this repository extend an existing database. They do **not** create the entire base schema in an empty Supabase project. The schema under `tests/fixtures` is a test fixture, not a production installation script.
+### 2. Install or upgrade the database
 
-### 2. Apply database migrations
+Run [supabase/install.sql](supabase/install.sql) in your project's **Supabase SQL Editor**. This single transaction creates a fresh base schema when needed, applies all seven migrations, records their checksums, and can be rerun safely. An existing complete Shroud database is upgraded without recreating its base tables. An incomplete base schema is rejected instead of being guessed.
 
-Open your Supabase project's **SQL Editor** and run unapplied migration files in this order:
+Use [supabase/verify.sql](supabase/verify.sql) for read-only verification. **Workspace Settings → Database setup** checks the required functions and provides the same installer download. Never run the test fixtures against your real database.
 
-| Migration | Purpose |
-| --- | --- |
-| [202610120001_complete_core.sql](supabase/migrations/202610120001_complete_core.sql) | Core RPCs, authorization, RLS, project operations, and audit support |
-| [202610120002_app_table_grants.sql](supabase/migrations/202610120002_app_table_grants.sql) | Database table privileges required by the application |
-| [202610120003_browser_terminal.sql](supabase/migrations/202610120003_browser_terminal.sql) | Authenticated secret reads and writes for the browser terminal |
-| [202610130004_workspace_creation.sql](supabase/migrations/202610130004_workspace_creation.sql) | Empty workspace creation and owner-membership repair for legacy starter projects |
+New workspaces start empty. Existing starter projects and their data remain available. Back up your database before production upgrades. After changing migration source files, regenerate the installer with:
 
-Apply each migration once. If earlier migrations have already been applied, run only the remaining files. The first migration moves existing functions into a private schema, so it should not be rerun as a setup shortcut.
-
-After the final migration, new workspaces start empty. Existing starter projects and their data remain available.
+```bash
+node scripts/prepare-database.mjs
+```
 
 ### 3. Configure the website
 
@@ -119,7 +120,7 @@ Open [Shroud locally](http://localhost:3000). Usage documentation is available a
 
 1. Sign up or sign in.
 2. Create a workspace, or join an existing one using an invitation link or token.
-3. Use the workspace menu in the dashboard header to switch between memberships.
+3. Use the workspace menu at the top of the sidebar to switch between memberships.
 4. Click **New project**. Each project gets Development, Staging, and Production environments.
 5. Open a project, choose an environment, and add your secret keys and values.
 6. Set required keys to check whether configuration is present across environments.
@@ -143,6 +144,31 @@ Workspace owners/admins can create tokens under **API tokens**. Choose the requi
 - `secrets:write`: create or update secrets; desktop push also needs read access.
 
 Tokens are for API/desktop automation. The browser terminal uses your signed-in session and does not require a token.
+
+## Keyboard shortcuts and project views
+
+- **Ctrl/Cmd + K** opens the command palette. Use arrow keys, Enter, and Escape to navigate.
+- A project's **Secrets** view uses a flat explorer with a right-side inspector.
+- In the inspector, hold **Space** to reveal a value; Production requires **Ctrl/Cmd + Space**. Touch users can press and hold the reveal control. Releasing it or leaving the relevant context hides the value.
+- **Compare** shows missing keys and value drift. Matching/different values are determined on the server using full project/key-specific HMAC fingerprints; only shortened fingerprints reach the UI. The first readable environment, preferring Development, is the comparison baseline. Different values can be intentional.
+- Writers can promote a key from its inspector, or drag it onto another environment context. A confirmation dialog appears before the value is copied.
+- **Settings** contains required keys, Production approval, Vercel sync, and project details; **Access** contains project membership controls.
+
+## Search, rotation, import, and Production approval
+
+**Search** in the sidebar searches key names in the current workspace's projects you can access. Open a result to select its environment and secret. **Rotations** lists scheduled dates; set a date and optional repeat interval in a secret's inspector. Updating its value reschedules a recurring reminder. These reminders appear in the app; they do not send email.
+
+In a project's **Secrets** view, use **Import .env** to paste text, review created/updated key names, then confirm. Existing descriptions and required flags are preserved, unrelated keys are left intact, and the import is atomic. If configuration changes after preview, preview again. **Export .env** explicitly downloads plaintext for the selected environment.
+
+Production writes require an explicit confirmation. In **Project Settings**, owners/admins can require independent approval. Writes then appear as pending in **Activity**, and existing values remain active until a different owner/admin approves. Review shows proposed/current fingerprints, never values. Requests expire after seven days; changed values or metadata, revoked tokens, and removed write access prevent stale approval. The requester can cancel; admins can reject. Disabling the policy also requires confirmation. Project deletion requires disabling approval first and confirming Production deletion.
+
+## Connect Vercel
+
+Open **Project → Settings → Vercel** as a project owner/admin. Enter the Vercel project ID or slug, optional team ID, and a Vercel access token with access to that project. Shroud validates the project and encrypts the token using its existing server encryption key. The connection is specific to the Shroud project.
+
+Select a Shroud source environment and a Vercel destination (Development, Preview, or Production), review the key names, and explicitly sync. Only applied values are sent; pending approval requests are excluded. Production sources or destinations require extra confirmation. Existing matching Vercel keys are updated; unrelated Vercel keys are preserved. A provider failure may leave partial external updates; review Vercel before retrying. Shroud does not trigger deployments automatically: redeploy after syncing so new builds use the configuration.
+
+Values are sent using Vercel's [sensitive Secret environment variable settings](https://vercel.com/docs/environment-variables/sensitive-environment-variables). Disconnecting removes the stored connection from Shroud; revoke the token in Vercel if needed. No account is connected until you supply its configuration.
 
 ## Browser terminal: no installation required
 
@@ -209,6 +235,9 @@ Build the website from the repository root:
 
 ```bash
 cd web
+npm test
+npm run typecheck
+npm run lint
 npm run build
 ```
 
@@ -225,6 +254,8 @@ Run SQL authorization and migration tests from the repository root:
 ```bash
 npm install --prefix .tmp/sql-check --no-save @electric-sql/pglite
 node tests/security-migration.mjs
+node tests/product-workflows.mjs
+node tests/secret-reveal-migration.mjs
 ```
 
 The SQL tests run against a local PGlite fixture rather than your Supabase database.
@@ -245,9 +276,9 @@ The desktop CLI can point to the deployment through `SHROUD_API_URL`.
 | Authentication reports `fetch failed` | The server's network access to Supabase and the configured project URL |
 | Email confirmation or password reset does not arrive | Supabase email settings, SMTP configuration, and spam folder |
 | Project reports **Access required** | Your project membership and role, even if you belong to its workspace |
-| Environment checks or terminal queries fail | All four migrations are applied in order and the server can reach Supabase |
+| Environment checks or terminal queries fail | The generated installer has been applied and the server can reach Supabase |
 | Existing values cannot be decrypted | The original `SHROUD_ENCRYPTION_KEY` is still configured |
-| Projects appear to be missing | The selected workspace in the dashboard header |
+| Projects appear to be missing | The selected workspace at the top of the sidebar |
 
 ## Security and current scope
 

@@ -1,0 +1,10 @@
+"use client";
+import Link from "next/link";
+import { useEffect,useState } from "react";
+import { Clock3 } from "lucide-react";
+type Reminder={secret_id:string;key:string;project_id:string;project_name:string;environment_id:string;environment_name:string;next_rotation_at:string;interval_days:number|null};
+export function RotationReminders(){
+ const [items,setItems]=useState<Reminder[]>([]),[error,setError]=useState(""),[loading,setLoading]=useState(true),[now,setNow]=useState(0);
+ useEffect(()=>{const controller=new AbortController();fetch("/api/rotation",{cache:"no-store",signal:controller.signal}).then(async response=>{if(!response.ok)throw new Error();const data=await response.json();setItems(data.items);setNow(Date.now());}).catch(()=>{if(!controller.signal.aborted)setError("Reminders are unavailable. Check your connection and database setup.");}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});return()=>controller.abort();},[]);
+ return <div>{error?<p className="inline-error" role="alert">{error}</p>:loading?<div className="skeleton w-64"/>:items.length?<div className="surface-card divide-y divide-border">{items.map(item=>{const due=Date.parse(item.next_rotation_at)<=now;const soon=Date.parse(item.next_rotation_at)-now<=7*86400000;return <Link href={"/dashboard/projects/"+item.project_id+"?secret="+item.secret_id+"&env="+item.environment_id} key={item.secret_id} className="flex flex-wrap items-center gap-3 px-4 py-4 hover:bg-accent"><Clock3 size={14} className={due?"text-destructive":soon?"text-amber-300":"text-muted-foreground"}/><span className="min-w-0 flex-1"><span className="block truncate font-mono text-xs">{item.key}</span><span className="mt-1 block text-[10px] text-muted-foreground">{item.project_name} / {item.environment_name}</span></span><span className={"text-[11px] "+(due?"text-destructive":soon?"text-amber-300":"text-muted-foreground")}>{due?"Overdue · ":soon?"Due soon · ":""}{item.next_rotation_at.slice(0,10)}</span></Link>;})}</div>:<div className="empty-state"><strong>No rotation reminders</strong><p>Choose a secret and set its next rotation date in the inspector.</p></div>}</div>;
+}

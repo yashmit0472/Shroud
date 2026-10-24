@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { environmentHealth } from "@/lib/environment-health";
+import { connection } from "next/server";
+import { ProjectWorkspace } from "@/components/project-workspace";
 import { RequiredKeyManager } from "@/components/required-key-manager";
 import { canManage } from "@/lib/workspace-access";
 import { ProjectMemberManager } from "@/components/project-member-manager";
@@ -10,13 +11,15 @@ import { DeleteProjectButton } from "@/components/delete-project-button";
 type ProjectContentProps = {
     params: Promise<{
         projectId: string;
+        environmentId?: string;
     }>;
 };
 
 export default async function ProjectContent({
     params,
 }: ProjectContentProps) {
-    const { projectId } = await params;
+    await connection();
+    const { projectId, environmentId } = await params;
 
     const supabase = await createClient();
 
@@ -104,7 +107,7 @@ export default async function ProjectContent({
 
     const environmentIds = (environments ?? []).map((environment) => environment.id);
     const { data: keyMetadata, error: keyError } = environmentIds.length
-        ? await supabase.from("secrets").select("environment_id, key, is_required").in("environment_id", environmentIds)
+        ? await supabase.from("secrets").select("id, environment_id, key, description, is_required, created_at, updated_at, created_by").in("environment_id", environmentIds)
         : { data: [], error: null };
     const { data: requiredKeys, error: requiredError } = await supabase.from("required_keys").select("key").eq("project_id", project.id);
     if (keyError || requiredError) {
@@ -114,7 +117,7 @@ export default async function ProjectContent({
         });
         throw new Error("Unable to check environment consistency.");
     }
-    const health = environmentHealth(environmentIds, keyMetadata ?? [], (requiredKeys ?? []).map((entry) => entry.key));
+    if (environmentId && !environmentIds.includes(environmentId)) notFound();
     const { data: teamMembers, error: teamMembersError } = canManage(membership.role)
         ? await supabase.rpc("list_team_members", { p_team_id: project.team_id, p_user_id: userId })
         : { data: [], error: null };
@@ -123,127 +126,8 @@ export default async function ProjectContent({
         : { data: [], error: null };
     if (teamMembersError || projectMembersError) throw new Error("Unable to load project access settings.");
 
-    return (
-        <main className="min-h-screen px-6 py-16">
-            <div className="mx-auto max-w-6xl">
-                <div>
-                    <p className="text-sm text-muted-foreground">
-                        Project
-                    </p>
-
-                    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                            <h1 className="text-3xl font-semibold tracking-tight">
-                                {project.name}
-                            </h1>
-
-                            <p className="mt-2 max-w-2xl text-muted-foreground">
-                                {project.description ||
-                                    "No description provided."}
-                            </p>
-                        </div>
-
-                        <div className="rounded-md border px-3 py-1.5 text-sm text-muted-foreground">
-                            {project.slug}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="mt-12">
-                    <h2 className="text-xl font-semibold">
-                        Environments
-                    </h2>
-
-                    <p className="mt-2 text-sm text-muted-foreground">
-                        Manage secrets and configuration for each environment.
-                    </p>
-
-                    <div className="mt-6 grid gap-5 md:grid-cols-3">
-                        {environments && environments.length > 0 ? (
-                            environments.map((environment) => (
-                                <a
-                                    key={environment.id}
-                                    href={`/dashboard/projects/${project.id}/environments/${environment.id}`}
-                                    className="group rounded-2xl border bg-card p-6 transition-all hover:-translate-y-0.5 hover:bg-muted/40"
-                                >
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div>
-                                            <p className="text-sm text-muted-foreground">
-                                                {environment.type}
-                                            </p>
-
-                                            <h3 className="mt-2 text-lg font-semibold">
-                                                {environment.name}
-                                            </h3>
-                                            {!!health.find((item) => item.id === environment.id)?.missingRequired.length && (
-                                                <p className="mt-3 rounded-md bg-destructive/10 p-2 text-xs text-destructive">
-                                                    Missing required: {health.find((item) => item.id === environment.id)?.missingRequired.join(", ")}
-                                                </p>
-                                            )}
-                                            {!!health.find((item) => item.id === environment.id)?.missingOptional.length && (
-                                                <p className="mt-2 text-xs text-muted-foreground">Other missing keys: {health.find((item) => item.id === environment.id)?.missingOptional.join(", ")}</p>
-                                            )}
-
-                                            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                                                Manage secrets and configuration for this environment.
-                                            </p>
-                                        </div>
-
-                                        <span className="text-lg text-muted-foreground transition-transform group-hover:translate-x-1">
-                                            →
-                                        </span>
-                                    </div>
-
-                                    <div className="mt-6 text-sm font-medium">
-                                        Open environment
-                                    </div>
-                                </a>
-                            ))
-                        ) : (
-                            <div className="rounded-2xl border border-dashed p-8 md:col-span-3">
-                                <h3 className="font-medium">
-                                    No environments found
-                                </h3>
-
-                                <p className="mt-2 text-sm text-muted-foreground">
-                                    This project does not have any environments yet.
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="mt-12"><RequiredKeyManager projectId={project.id} keys={(requiredKeys ?? []).map((entry) => entry.key)} canEdit={canManage(membership.role)} /></div>
-                {canManage(membership.role) && <div className="mt-8"><ProjectMemberManager projectId={project.id} currentRole={membership.role} members={(teamMembers ?? []).map((member: { user_id: string; full_name: string | null }) => ({ ...member, projectRole: projectMembers?.find((entry) => entry.user_id === member.user_id)?.role ?? null }))} /></div>}
-                <div className="mt-12 rounded-2xl border bg-card p-6">
-                    <h2 className="text-xl font-semibold">
-                        Project details
-                    </h2>
-
-                    <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                        <div>
-                            <p className="text-sm text-muted-foreground">
-                                Your role
-                            </p>
-
-                            <p className="mt-1 font-medium capitalize">
-                                {membership.role}
-                            </p>
-                        </div>
-
-                        <div>
-                            <p className="text-sm text-muted-foreground">
-                                Project ID
-                            </p>
-
-                            <p className="mt-1 break-all font-mono text-sm">
-                                {project.id}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                {canManage(membership.role) && <DeleteProjectButton projectId={project.id} name={project.name} />}
-            </div>
-        </main>
-    );
+    return <ProjectWorkspace project={project} environments={environments ?? []} secrets={keyMetadata ?? []} required={(requiredKeys ?? []).map(entry => entry.key)} role={membership.role} initialEnvironment={environmentId}
+      access={<div className="space-y-4"><div><h2>Project access</h2><p className="mt-2 text-xs text-muted-foreground">Your role: <span className="capitalize">{membership.role}</span>. Workspace membership alone does not grant access to secrets.</p></div>{canManage(membership.role) ? <ProjectMemberManager projectId={project.id} currentRole={membership.role} members={(teamMembers ?? []).map((member: { user_id: string; full_name: string | null }) => ({ ...member, projectRole: projectMembers?.find(entry => entry.user_id === member.user_id)?.role ?? null }))} /> : <p className="empty-state">Ask a project owner or admin to change project membership.</p>}</div>}
+      settings={<div className="space-y-5"><RequiredKeyManager projectId={project.id} keys={(requiredKeys ?? []).map(entry => entry.key)} canEdit={canManage(membership.role)} /><div className="surface-card p-5"><h2>Project details</h2><dl className="mt-4 space-y-3 text-xs"><div><dt className="text-muted-foreground">Slug</dt><dd className="mt-1 font-mono">{project.slug}</dd></div><div><dt className="text-muted-foreground">Project ID</dt><dd className="mt-1 break-all font-mono">{project.id}</dd></div></dl></div>{canManage(membership.role) && <DeleteProjectButton projectId={project.id} name={project.name} />}</div>}
+    />;
 }

@@ -1,7 +1,8 @@
 """Generate reviewed SQL wrappers around the user's exported legacy RPCs."""
 from pathlib import Path
+import re
 
-out = ["-- Apply once after a database backup. Requires the existing exported Shroud schema.\nBEGIN;\nCREATE SCHEMA IF NOT EXISTS shroud_private;\nREVOKE ALL ON SCHEMA shroud_private FROM PUBLIC, anon, authenticated;\n"]
+out = ["-- Core authorization upgrade. Prefer the generated supabase/install.sql installer.\nBEGIN;\nCREATE SCHEMA IF NOT EXISTS shroud_private;\nREVOKE ALL ON SCHEMA shroud_private FROM PUBLIC, anon, authenticated;\n"]
 out.append("""
 CREATE TABLE shroud_private.token_rate_limits(token_id uuid PRIMARY KEY REFERENCES public.api_tokens(id) ON DELETE CASCADE, window_start timestamptz NOT NULL, requests integer NOT NULL);
 CREATE FUNCTION shroud_private.assert_token(p_hash text, p_team uuid, p_scope text)
@@ -358,5 +359,14 @@ COMMIT;
 
 path = Path("supabase/migrations/202610120001_complete_core.sql")
 path.parent.mkdir(parents=True, exist_ok=True)
-path.write_text("\n".join(out), encoding="utf-8")
+sql = "\n".join(out)
+sql = sql.replace("CREATE FUNCTION ", "CREATE OR REPLACE FUNCTION ")
+sql = sql.replace("CREATE TABLE shroud_private.token_rate_limits", "CREATE TABLE IF NOT EXISTS shroud_private.token_rate_limits")
+def move_once(match):
+    name, types = match.groups()
+    signature = f"shroud_private.{name}({types})"
+    return f"DO $move$ BEGIN IF to_regprocedure('{signature}') IS NULL THEN ALTER FUNCTION public.{name}({types}) SET SCHEMA shroud_private; END IF; END $move$;"
+sql = re.sub(r"ALTER FUNCTION public\.(\w+)\(([^;]+)\) SET SCHEMA shroud_private;", move_once, sql)
+sql = sql.replace("EXECUTE format('CREATE TRIGGER shroud_audit_mutation", "EXECUTE format('DROP TRIGGER IF EXISTS shroud_audit_mutation ON public.%I',table_name);\n    EXECUTE format('CREATE TRIGGER shroud_audit_mutation")
+path.write_text(sql, encoding="utf-8")
 print(f"Generated {path}")

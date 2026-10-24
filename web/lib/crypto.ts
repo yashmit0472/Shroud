@@ -74,3 +74,10 @@ export function decryptSecret(encryptedValue: string) {
         decipher.final(),
     ]).toString("utf8");
 }
+
+// Project/key scope prevents correlation between unrelated secrets. HKDF keeps
+// fingerprint material separate from the AES key. No plaintext hashes are stored.
+export function secretFingerprint(projectId: string, secretKey: string, value: string) {
+    const key = crypto.hkdfSync("sha256", getEncryptionKey(), Buffer.from("shroud/fingerprints/v1"), Buffer.from(projectId), 32);
+    return crypto.createHmac("sha256", Buffer.from(key)).update(JSON.stringify([secretKey, value])).digest("hex");
+}

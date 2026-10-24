@@ -1,0 +1,29 @@
+name: Checks
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            cli/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm test && npm run typecheck && npm run lint
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: test-only-publishable-key
+          SHROUD_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      - run: npm ci && npm test && npm run build
+        working-directory: cli
+      - run: npm install --prefix .tmp/sql-check --no-save @electric-sql/pglite@0.5.9
+      - run: node scripts/prepare-database.mjs
+      - run: node tests/security-migration.mjs && node tests/product-workflows.mjs && node tests/secret-reveal-migration.mjs

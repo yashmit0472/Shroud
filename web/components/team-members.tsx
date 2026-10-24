@@ -1,610 +1,74 @@
 "use client";
-
-import { useCallback, useEffect, useState } from "react";
+import { useCallback,useEffect,useRef,useState } from "react";
+import { usePathname,useRouter,useSearchParams } from "next/navigation";
 import Image from "next/image";
-import {
-    Copy,
-    Loader2,
-    MailPlus,
-    Shield,
-    Trash2,
-    UserRound,
-} from "lucide-react";
+import { Copy,Check,Plus,Trash2,UserRound,Link2 } from "lucide-react";
+import { Dialog } from "@/components/dialog";
+import { EmptyState } from "@/components/empty-state";
 
-type TeamRole = "owner" | "admin" | "developer" | "viewer";
-
-type Member = {
-    id: string;
-    user_id: string;
-    full_name: string | null;
-    avatar_url: string | null;
-    role: TeamRole;
-    created_at: string;
-};
-
-type Invitation = {
-    id: string;
-    role: TeamRole;
-    expires_at: string;
-    created_at: string;
-    invited_by: string;
-};
-
-type Props = {
-    teamId: string;
-    currentUserId: string;
-    currentUserRole: TeamRole;
-};
-
-export function TeamMembers({
-    teamId,
-    currentUserId,
-    currentUserRole,
-}: Props) {
-    const [members, setMembers] = useState<Member[]>([]);
-    const [invitations, setInvitations] = useState<Invitation[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [inviteOpen, setInviteOpen] = useState(false);
-    const [error, setError] = useState("");
-
-    const canManage =
-        currentUserRole === "owner" ||
-        currentUserRole === "admin";
-
-    const loadTeam = useCallback(async () => {
-        setLoading(true);
-        setError("");
-
-        try {
-            const [membersResponse, invitationsResponse] =
-                await Promise.all([
-                    fetch(`/api/v1/teams/${teamId}/members`),
-                    canManage
-                        ? fetch(
-                              `/api/v1/teams/${teamId}/invitations`,
-                          )
-                        : Promise.resolve(null),
-                ]);
-
-            const membersData =
-                await membersResponse.json();
-            if (!membersResponse.ok) throw new Error(membersData.error ?? "Unable to load team members.");
-
-            setMembers(membersData.members ?? []);
-
-            if (invitationsResponse) {
-                const invitationsData =
-                    await invitationsResponse.json();
-                if (!invitationsResponse.ok) throw new Error(invitationsData.error ?? "Unable to load invitations.");
-
-                setInvitations(
-                    invitationsData.invitations ?? [],
-                );
-            }
-        } catch (failure) {
-            setError(failure instanceof Error ? failure.message : "Unable to load team.");
-        } finally {
-            setLoading(false);
-        }
-    }, [teamId, canManage]);
-
-    useEffect(() => {
-        loadTeam();
-    }, [loadTeam]);
-
-    async function removeMember(userId: string) {
-        const confirmed = window.confirm(
-            "Remove this member from the team?",
-        );
-
-        if (!confirmed) return;
-
-        const response = await fetch(
-            `/api/v1/teams/${teamId}/members/${userId}`,
-            {
-                method: "DELETE",
-            },
-        );
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            window.alert(
-                data.error ?? "Failed to remove member.",
-            );
-            return;
-        }
-
-        setMembers((current) =>
-            current.filter(
-                (member) => member.user_id !== userId,
-            ),
-        );
-    }
-
-    if (loading && !inviteOpen) {
-        return (
-            <div className="flex min-h-[300px] items-center justify-center">
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-8">
-            {/* Header */}
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <div className="flex items-center gap-2">
-                        <Shield className="size-5" />
-                        <h1 className="text-xl font-semibold">
-                            Team members
-                        </h1>
-                    </div>
-
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Manage who has access to this team.
-                    </p>
-                </div>
-
-                {canManage && (
-                    <button
-                        type="button"
-                        onClick={() => setInviteOpen(true)}
-                        className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                    >
-                        <MailPlus className="size-4" />
-                        Create invitation link
-                    </button>
-                )}
-            </div>
-
-            {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-            {!canManage && <p className="text-sm text-muted-foreground">Only workspace owners and admins can generate invitations.</p>}
-
-            {/* Members */}
-            <section className="rounded-xl border bg-card">
-                <div className="border-b px-5 py-4">
-                    <h2 className="text-sm font-medium">
-                        Members
-                    </h2>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                        {members.length}{" "}
-                        {members.length === 1
-                            ? "member"
-                            : "members"}
-                    </p>
-                </div>
-
-                <div className="divide-y">
-                    {members.map((member) => {
-                        const isSelf =
-                            member.user_id ===
-                            currentUserId;
-
-                        return (
-                            <div
-                                key={member.id}
-                                className="flex items-center justify-between gap-4 px-5 py-4"
-                            >
-                                <div className="flex min-w-0 items-center gap-3">
-                                    <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted">
-                                        {member.avatar_url ? (
-                                            <Image
-                                                src={
-                                                    member.avatar_url
-                                                }
-                                                alt=""
-                                                width={36} height={36} unoptimized
-                                                className="size-full object-cover"
-                                            />
-                                        ) : (
-                                            <UserRound className="size-4 text-muted-foreground" />
-                                        )}
-                                    </div>
-
-                                    <div className="min-w-0">
-                                        <div className="truncate text-sm font-medium">
-                                            {member.full_name ||
-                                                "Unnamed user"}
-                                            {isSelf && (
-                                                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                                                    You
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        <div className="text-xs text-muted-foreground">
-                                            Joined{" "}
-                                            {new Date(
-                                                member.created_at,
-                                            ).toLocaleDateString()}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-3">
-                                    <RoleBadge
-                                        role={member.role}
-                                    />
-
-                                    {canManage &&
-                                        !isSelf &&
-                                        member.role !==
-                                            "owner" && (
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    removeMember(
-                                                        member.user_id,
-                                                    )
-                                                }
-                                                className="rounded-md p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                                                title="Remove member"
-                                            >
-                                                <Trash2 className="size-4" />
-                                            </button>
-                                        )}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </section>
-
-            {/* Pending invitations */}
-            {canManage &&
-                invitations.length > 0 && (
-                    <section className="rounded-xl border bg-card">
-                        <div className="border-b px-5 py-4">
-                            <h2 className="text-sm font-medium">
-                                Pending invitations
-                            </h2>
-
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                Invitations that haven&apos;t
-                                been accepted yet.
-                            </p>
-                        </div>
-
-                        <div className="divide-y">
-                            {invitations.map(
-                                (invitation) => (
-                                    <div
-                                        key={
-                                            invitation.id
-                                        }
-                                        className="flex items-center justify-between gap-4 px-5 py-4"
-                                    >
-                                        <div>
-                                            <div className="text-sm font-medium">
-                                                Team invitation
-                                            </div>
-
-                                            <div className="mt-1 text-xs text-muted-foreground">
-                                                Expires{" "}
-                                                {new Date(
-                                                    invitation.expires_at,
-                                                ).toLocaleDateString()}
-                                            </div>
-                                        </div>
-
-                                        <RoleBadge
-                                            role={
-                                                invitation.role
-                                            }
-                                        />
-                                    </div>
-                                ),
-                            )}
-                        </div>
-                    </section>
-                )}
-
-            {inviteOpen && (
-                <InviteMemberModal
-                    teamId={teamId}
-                    onClose={() =>
-                        setInviteOpen(false)
-                    }
-                    onCreated={loadTeam}
-                />
-            )}
-        </div>
-    );
+type TeamRole="owner"|"admin"|"developer"|"viewer";
+type Member={id:string;user_id:string;full_name:string|null;avatar_url:string|null;role:TeamRole;created_at:string};
+type Invitation={id:string;role:TeamRole;expires_at:string;created_at:string;invited_by:string};
+export function TeamMembers({teamId,currentUserId,currentUserRole}:{teamId:string;currentUserId:string;currentUserRole:TeamRole}){
+  const router=useRouter(),pathname=usePathname(),search=useSearchParams();
+  const [members,setMembers]=useState<Member[]>([]),[invitations,setInvitations]=useState<Invitation[]>([]);
+  const [loading,setLoading]=useState(true),[inviteOpen,setInviteOpen]=useState(false),[error,setError]=useState(""),[removing,setRemoving]=useState<Member|null>(null),[busy,setBusy]=useState(false);
+  const canManage=currentUserRole==="owner"||currentUserRole==="admin";
+  const loadTeam=useCallback(async()=>{
+    setLoading(true);
+    try{
+      const [membersResponse,invitationsResponse]=await Promise.all([fetch("/api/v1/teams/"+teamId+"/members",{cache:"no-store"}),canManage?fetch("/api/v1/teams/"+teamId+"/invitations",{cache:"no-store"}):Promise.resolve(null)]);
+      if(!membersResponse.ok)throw new Error();
+      const data=await membersResponse.json();setMembers(data.members??[]);
+      if(invitationsResponse){if(!invitationsResponse.ok)throw new Error();const data=await invitationsResponse.json();setInvitations(data.invitations??[]);}
+    }catch{setError("Team details could not be loaded. Check your connection and try again.");}
+    finally{setLoading(false);}
+  },[teamId,canManage]);
+  useEffect(()=>{void loadTeam();},[loadTeam]);
+  function closeInvite(){setInviteOpen(false);if(search.has("invite"))router.replace(pathname);}
+  async function removeMember(){
+    if(!removing)return;
+    setBusy(true);setError("");
+    try{const response=await fetch("/api/v1/teams/"+teamId+"/members/"+removing.user_id,{method:"DELETE"});if(!response.ok)throw new Error();setMembers(current=>current.filter(member=>member.user_id!==removing.user_id));setRemoving(null);}
+    catch{setError("This member could not be removed. Check your role and connection.");}
+    finally{setBusy(false);}
+  }
+  return <div><div className="mb-4 flex items-center justify-between"><span className="text-xs text-muted-foreground">{members.length} members · Your role: {currentUserRole}</span>{canManage&&<button type="button" className="btn-accent" onClick={()=>setInviteOpen(true)}><Plus size={12}/>Create invitation link</button>}</div>
+    {error&&<p className="inline-error mb-4" role="alert">{error}</p>}
+    {loading?<div className="surface-card">{[1,2,3].map(index=><div className="skeleton-row" key={index}><div className="skeleton w-1/2"/></div>)}</div>:members.length?<div className="surface-card divide-y divide-border">{members.map(member=><div key={member.id} className="flex items-center gap-3 px-4 py-3"><span className="avatar overflow-hidden">{member.avatar_url?<Image src={member.avatar_url} width={27} height={27} alt="" unoptimized className="size-full object-cover"/>:<UserRound size={13}/>}</span><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{member.full_name||"Unnamed member"}{member.user_id===currentUserId&&<span className="ml-2 text-[10px] text-muted-foreground">You</span>}</p><p className="mt-1 text-[10px] text-muted-foreground">Joined {new Date(member.created_at).toLocaleDateString()}</p></div><span className="rounded border border-border px-2 py-1 text-[10px] capitalize text-muted-foreground">{member.role}</span>{canManage&&member.user_id!==currentUserId&&member.role!=="owner"&&(currentUserRole==="owner"||member.role!=="admin")&&<button type="button" aria-label={"Remove "+(member.full_name||"member")} className="icon-button hover:text-destructive" onClick={()=>{setError("");setRemoving(member);}}><Trash2 size={12}/></button>}</div>)}</div>:<EmptyState title="No members found" description="Workspace membership could not be found in the current list."/>}
+    {!canManage&&<p className="mt-4 text-[11px] text-muted-foreground">Workspace owners and admins can create invitation links.</p>}
+    {canManage&&<><div className="section-label"><span>Pending invitations</span><span className="text-[10px] text-muted-foreground">{invitations.length}</span></div>{invitations.length?<div className="surface-card divide-y divide-border">{invitations.map(invitation=><div key={invitation.id} className="flex items-center gap-3 px-4 py-3"><Link2 size={13} className="text-muted-foreground"/><div className="flex-1"><p className="text-xs">Workspace invitation</p><p className="mt-1 text-[10px] text-muted-foreground">Expires {new Date(invitation.expires_at).toLocaleDateString()}</p></div><span className="text-[10px] capitalize text-muted-foreground">{invitation.role}</span></div>)}</div>:<p className="text-xs text-muted-foreground">No pending invitations. Generate a link to bring a teammate in.</p>}</>}
+    {canManage&&(inviteOpen||search.get("invite")==="1")&&<InviteMemberModal teamId={teamId} onClose={closeInvite} onCreated={loadTeam}/>}
+    {removing&&<Dialog title="Remove workspace member" onClose={()=>{if(!busy)setRemoving(null);}}><p className="text-xs text-muted-foreground">Remove {removing.full_name||"this member"} from the workspace? Their workspace access will end.</p><div className="mt-5 flex justify-end gap-2"><button type="button" className="btn-outline" disabled={busy} onClick={()=>setRemoving(null)}>Cancel</button><button type="button" className="btn-outline text-destructive" disabled={busy} onClick={()=>void removeMember()}>{busy?"Removing…":"Remove member"}</button></div></Dialog>}
+  </div>;
 }
-
-function RoleBadge({ role }: { role: TeamRole }) {
-    return (
-        <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium capitalize">
-            {role}
-        </span>
-    );
+function InviteMemberModal({teamId,onClose,onCreated}:{teamId:string;onClose:()=>void;onCreated:()=>Promise<void>}){
+  const [role,setRole]=useState<"admin"|"developer"|"viewer">("developer"),[expires,setExpires]=useState("7"),[loading,setLoading]=useState(false),[error,setError]=useState("");
+  const [result,setResult]=useState<{token:string;invite_code:string}|null>(null);
+  async function create(){
+    setLoading(true);setError("");
+    try{
+      const response=await fetch("/api/v1/teams/"+teamId+"/invitations",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({role,expires_in_days:Number(expires)})});
+      if(!response.ok)throw new Error();
+      const data=await response.json();setResult({token:data.invitation.token,invite_code:data.invitation.invite_code});await onCreated();
+    }catch{setError("Invitation could not be created. Check your permissions and connection.");}
+    finally{setLoading(false);}
+  }
+  const link=result?window.location.origin+"/invite/"+result.token:"";
+  return <Dialog title={result?"Invitation created":"Invite to workspace"} onClose={()=>{if(!loading)onClose();}}>
+    {result?<><p className="mb-4 text-xs text-muted-foreground">Copy the credentials now. They will not be shown again. Share the full link or token with your teammate.</p><InvitationCredential label="Invitation link" value={link}/><InvitationCredential label="Invitation token" value={result.token}/><details className="mt-3 text-[10px] text-muted-foreground"><summary>Short invite code</summary><p className="my-2">The join form currently requires the full link or token.</p><InvitationCredential label="Code" value={result.invite_code}/></details><div className="mt-5 flex justify-end"><button type="button" className="btn-accent" disabled={loading} onClick={onClose}>Done</button></div></>:<>
+      <p className="mb-4 text-xs text-muted-foreground">Choose their workspace role. Project secret access is assigned separately.</p>
+      <div className="grid grid-cols-3 gap-2">{[{value:"admin",title:"Admin",description:"Manage workspace"},{value:"developer",title:"Developer",description:"Create projects"},{value:"viewer",title:"Viewer",description:"Read workspace"}].map(item=><button type="button" key={item.value} aria-pressed={role===item.value} className={"rounded border p-3 text-left "+(role===item.value?"border-primary/50 bg-primary/5":"border-border")} disabled={loading} onClick={()=>setRole(item.value as typeof role)}><span className="text-xs">{item.title}</span><span className="mt-2 block text-[10px] text-muted-foreground">{item.description}</span></button>)}</div>
+      <label className="auth-label mt-5">Invitation expires<select className="auth-input" value={expires} onChange={event=>setExpires(event.target.value)} disabled={loading}>{[1,7,14,30].map(days=><option key={days} value={days}>{days} {days===1?"day":"days"}</option>)}</select></label>
+      <div className="mt-5 flex justify-end gap-2"><button type="button" className="btn-outline" disabled={loading} onClick={onClose}>Cancel</button><button type="button" className="btn-accent" disabled={loading} onClick={()=>void create()}>{loading?"Creating…":"Create invitation"}</button></div>
+    </>}
+    {error&&<p className="inline-error mt-4" role="alert">{error}</p>}
+  </Dialog>;
 }
-
-function InviteMemberModal({
-    teamId,
-    onClose,
-    onCreated,
-}: {
-    teamId: string;
-    onClose: () => void;
-    onCreated: () => Promise<void>;
-}) {
-    const [role, setRole] =
-        useState<"admin" | "developer" | "viewer">(
-            "developer",
-        );
-
-    const [expires, setExpires] = useState("7");
-
-    const [loading, setLoading] = useState(false);
-
-    const [result, setResult] = useState<{
-        token: string;
-        invite_code: string;
-    } | null>(null);
-    const [error, setError] = useState("");
-    const [notice, setNotice] = useState("");
-
-    async function createInvitation() {
-        setLoading(true);
-        setError("");
-
-        try {
-            const response = await fetch(
-                `/api/v1/teams/${teamId}/invitations`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-                    },
-                    body: JSON.stringify({
-                        role,
-                        expires_in_days: Number(expires),
-                    }),
-                },
-            );
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error ?? "Failed to create invitation.");
-            }
-
-            setResult({
-                token: data.invitation.token,
-                invite_code:
-                    data.invitation.invite_code,
-            });
-
-            await onCreated();
-        } catch (failure) {
-            setError(failure instanceof Error ? failure.message : "Failed to create invitation.");
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    async function copy(value: string) {
-        setError("");
-        setNotice("");
-        try {
-            await navigator.clipboard.writeText(value);
-            setNotice("Copied to clipboard.");
-        } catch {
-            setError("Copy failed. Select and copy the value manually.");
-        }
-    }
-
-    const inviteLink =
-        typeof window !== "undefined" && result
-            ? `${window.location.origin}/invite/${result.token}`
-            : "";
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-            <div role="dialog" aria-modal="true" aria-labelledby="invitation-title" className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border bg-background shadow-xl">
-                <div className="border-b px-5 py-4">
-                    <h2 id="invitation-title" className="font-semibold">
-                        Invite a team member
-                    </h2>
-
-                    <p className="mt-1 text-sm text-muted-foreground">
-                        Create a secure invitation for your
-                        teammate.
-                    </p>
-                </div>
-
-                {error && <p role="alert" className="px-5 pt-4 text-sm text-red-300">{error}</p>}
-                {notice && <p role="status" className="px-5 pt-4 text-sm text-lime-300">{notice}</p>}
-
-                {!result ? (
-                    <>
-                        <div className="space-y-5 px-5 py-5">
-                            <div>
-                                <label className="mb-2 block text-sm font-medium">
-                                    Role
-                                </label>
-
-                                <select
-                                    value={role}
-                                    onChange={(event) =>
-                                        setRole(
-                                            event.target
-                                                .value as
-                                                | "admin"
-                                                | "developer"
-                                                | "viewer",
-                                        )
-                                    }
-                                    className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                >
-                                    <option value="developer">
-                                        Developer
-                                    </option>
-                                    <option value="admin">
-                                        Admin
-                                    </option>
-                                    <option value="viewer">
-                                        Viewer
-                                    </option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="mb-2 block text-sm font-medium">
-                                    Expires in
-                                </label>
-
-                                <select
-                                    value={expires}
-                                    onChange={(event) =>
-                                        setExpires(
-                                            event.target.value,
-                                        )
-                                    }
-                                    className="h-9 w-full rounded-md border bg-background px-3 text-sm"
-                                >
-                                    <option value="1">
-                                        1 day
-                                    </option>
-                                    <option value="7">
-                                        7 days
-                                    </option>
-                                    <option value="14">
-                                        14 days
-                                    </option>
-                                    <option value="30">
-                                        30 days
-                                    </option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="flex justify-end gap-2 border-t px-5 py-4">
-                            <button
-                                type="button"
-                                onClick={onClose}
-                                className="h-9 rounded-md border px-3 text-sm"
-                            >
-                                Cancel
-                            </button>
-
-                            <button
-                                type="button"
-                                disabled={loading}
-                                onClick={
-                                    createInvitation
-                                }
-                                className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:opacity-50"
-                            >
-                                {loading && (
-                                    <Loader2 className="size-4 animate-spin" />
-                                )}
-                                Create invitation
-                            </button>
-                        </div>
-                    </>
-                ) : (
-                    <div className="space-y-5 px-5 py-5">
-                        <div className="rounded-lg border bg-muted/40 p-4">
-                            <p className="text-sm font-medium">
-                                Invitation created
-                            </p>
-
-                            <p className="mt-1 text-xs text-muted-foreground">
-                                Copy the token now. It won&apos;t
-                                be shown again.
-                            </p>
-                        </div>
-
-                        <div>
-                            <label className="mb-2 block text-xs font-medium">
-                                Invite code
-                            </label>
-
-                            <div className="flex gap-2">
-                                <input
-                                    readOnly
-                                    value={
-                                        result.invite_code
-                                    }
-                                    className="h-9 min-w-0 flex-1 rounded-md border bg-muted px-3 font-mono text-sm"
-                                />
-
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        copy(
-                                            result.invite_code,
-                                        )
-                                    }
-                                    className="rounded-md border px-3"
-                                >
-                                    <Copy className="size-4" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="mb-2 block text-xs font-medium">
-                                Invitation token
-                            </label>
-
-                            <div className="flex gap-2">
-                                <input
-                                    readOnly
-                                    value={result.token}
-                                    className="h-9 min-w-0 flex-1 rounded-md border bg-muted px-3 font-mono text-xs"
-                                />
-
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        copy(result.token)
-                                    }
-                                    className="rounded-md border px-3"
-                                >
-                                    <Copy className="size-4" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="mb-2 block text-xs font-medium">
-                                Invite link
-                            </label>
-
-                            <div className="flex gap-2">
-                                <input
-                                    readOnly
-                                    value={inviteLink}
-                                    className="h-9 min-w-0 flex-1 rounded-md border bg-muted px-3 font-mono text-xs"
-                                />
-
-                                <button
-                                    type="button"
-                                    onClick={() => copy(inviteLink)}
-                                    className="rounded-md border px-3"
-                                >
-                                    <Copy className="size-4" />
-                                </button>
-                            </div>
-                        </div>
-
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="h-9 w-full rounded-md bg-primary text-sm font-medium text-primary-foreground"
-                        >
-                            Done
-                        </button>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
+function InvitationCredential({label,value}:{label:string;value:string}){
+  const [copied,setCopied]=useState(false),[error,setError]=useState("");
+  const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
+  useEffect(()=>()=>{if(timer.current)clearTimeout(timer.current);},[]);
+  async function copy(){try{await navigator.clipboard.writeText(value);setCopied(true);timer.current=setTimeout(()=>setCopied(false),1800);}catch{setError("Copy failed. Select and copy manually.");}}
+  return <label className="auth-label mt-4">{label}<div className="mt-2 flex gap-2"><input readOnly value={value} className="auth-input !mt-0 min-w-0 flex-1 !text-[10px]" onFocus={event=>event.target.select()}/><button type="button" aria-label={"Copy "+label} className="btn-outline" onClick={()=>void copy()}>{copied?<Check size={12}/>:<Copy size={12}/>}</button></div>{error&&<span role="alert" className="mt-2 block text-[10px] text-destructive">{error}</span>}</label>;
 }

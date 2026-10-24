@@ -1,5 +1,6 @@
 "use client";
 
+import { useSecretMutation } from "@/components/use-secret-mutation";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -13,6 +14,7 @@ export default function NewSecretForm({
     environmentId,
 }: NewSecretFormProps) {
     const router = useRouter();
+  const mutation=useSecretMutation();
 
     const [key, setKey] = useState("");
     const [value, setValue] = useState("");
@@ -29,7 +31,7 @@ export default function NewSecretForm({
         setLoading(true);
 
         try {
-            const response = await fetch(
+            const response = await mutation.request(
                 `/api/v1/projects/${projectId}/environments/${environmentId}/secrets`,
                 {
                     method: "POST",
@@ -53,7 +55,8 @@ export default function NewSecretForm({
                 );
             }
 
-            router.push(
+            if(data.pending){setValue("");router.push(`/dashboard/projects/${projectId}?tab=activity`);router.refresh();return;}
+      router.push(
                 `/dashboard/projects/${projectId}/environments/${environmentId}`
             );
 
@@ -70,7 +73,7 @@ export default function NewSecretForm({
     }
 
     return (
-        <form
+        <>{mutation.confirmation}<form
             onSubmit={handleSubmit}
             className="space-y-6 rounded-2xl border bg-card p-6"
         >
@@ -199,6 +202,6 @@ export default function NewSecretForm({
                     {loading ? "Creating..." : "Create secret"}
                 </button>
             </div>
-        </form>
+        </form></>
     );
 }

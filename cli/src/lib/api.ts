@@ -127,8 +127,11 @@ export async function createSecret(
     projectId: string,
     environmentId: string,
     secret: PushSecretInput,
+    confirmProduction = false,
 ) {
     return request<{
+        pending?: boolean;
+        request_id?: string;
         secret: {
             id: string;
             key: string;
@@ -141,7 +144,7 @@ export async function createSecret(
         token,
         {
             method: "POST",
-            body: JSON.stringify(secret),
+            body: JSON.stringify({...secret,confirm_production:confirmProduction}),
         },
     );
 }
