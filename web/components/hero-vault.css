@@ -43,6 +43,9 @@
 .vault-environments span{display:flex;align-items:center;gap:6px}.vault-environments i{width:4px;height:4px;border:1px solid #87956a;border-radius:50%}.vault-environments span:nth-child(2){color:#d7ff64}.vault-environments span:nth-child(2) i{background:#d7ff64;border-color:#d7ff64;box-shadow:0 0 7px #d7ff6455}
 @keyframes vault-float{0%,100%{transform:translateY(5px)}50%{transform:translateY(-9px)}}
 @keyframes vault-tag-float{0%,100%{transform:translateY(-2px)}50%{transform:translateY(4px)}}
+@media(min-width:1100px){.hero-vault{height:clamp(450px,55svh,620px)}.vault-float{scale:1.15}.vault-caption{left:clamp(20px,3vw,48px);right:24px}.vault-security-tag{right:clamp(0px,2vw,24px);top:clamp(50px,10svh,100px)}.vault-environments{bottom:8px;gap:clamp(20px,2vw,36px)}}
+@media(min-width:1440px){.vault-float{scale:1.35}}
+@media(min-width:1920px){.vault-float{scale:1.55}}
 @media(max-width:1000px) and (min-width:781px){.hero-vault{transform:scale(.86);transform-origin:center}.vault-security-tag{right:-22px}.vault-tag-detail{display:none}}
 @media(max-width:780px){.hero-vault{width:min(460px,100%);height:390px;margin:0 auto}.vault-caption{top:4px;left:12px;right:12px}.vault-security-tag{right:0;top:38px}.vault-scene{inset:14px 0 30px}.vault-floor{width:min(350px,calc(100% - 80px));height:200px}.vault-environments{bottom:0}}
 @media(max-width:380px){.hero-vault{height:345px}.vault-float{scale:.88}.vault-security-tag{top:20px}.vault-tag-detail{display:none}.vault-environments{gap:12px;font-size:8px}}
