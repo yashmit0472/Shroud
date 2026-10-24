@@ -13,7 +13,7 @@ function DesktopCliGuide() {
     <p>Requires Node.js 22.12 or newer. The CLI is packaged with this app; it is not yet published to the npm registry.</p>
     <a className="btn-accent mt-5" href="/downloads/shroud-cli-1.0.0.tgz" download><Download className="h-4 w-4" /> Download CLI package</a>
     <CommandBlock label="install from downloaded file" code={"npm install -g ./shroud-cli-1.0.0.tgz\nshroud --help"} />
-    <p>If you have this repository locally, you can instead run <code>npm install -g ./cli</code> from its root. On a hosted Shroud deployment, set <code>SHROUD_API_URL</code> to your Shroud web URL. The CLI defaults to <code>http://localhost:3000</code>.</p>
+    <p>Set <code>SHROUD_API_URL</code> to the website address you use to open Shroud, so the desktop CLI connects to the same account and workspaces.</p>
     <h2 id="cli-token">Create an API token</h2>
     <p>In the dashboard, open <Link className="text-lime-300 hover:underline" href="/dashboard/tokens">API tokens</Link>. Choose read access for pulling or running secrets. Add write access only if you will push values. Copy the new token when it appears; Shroud only shows it once.</p>
     <CommandBlock label="authenticate" code={"shroud login\nshroud whoami\nshroud teams"} />

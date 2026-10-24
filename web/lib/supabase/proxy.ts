@@ -2,11 +2,22 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasEnvVars } from "../utils";
 import { workspaceCookieName, workspaceCookieOptions } from "@/lib/workspace-selection";
+import { sessionCookieOptions } from "./session-options";
+import { signedInRedirectPath } from "@/lib/auth-redirect";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   });
+
+  function preserveSession(response:NextResponse){
+    supabaseResponse.cookies.getAll().forEach(cookie=>response.cookies.set(cookie));
+    for(const name of ["Cache-Control","Expires","Pragma"]){
+      const value=supabaseResponse.headers.get(name);
+      if(value)response.headers.set(name,value);
+    }
+    return response;
+  }
 
   // If the env vars are not set, skip proxy check. You can remove this
   // once you setup the project.
@@ -20,20 +31,22 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
     {
+      cookieOptions: sessionCookieOptions,
       cookies: {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet, headers) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value),
           );
-          supabaseResponse = NextResponse.next({
+          supabaseResponse = preserveSession(NextResponse.next({
             request,
-          });
+          }));
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options),
           );
+          Object.entries(headers).forEach(([name,value])=>supabaseResponse.headers.set(name,value));
         },
       },
     },
@@ -47,6 +60,13 @@ export async function updateSession(request: NextRequest) {
   // with the Supabase client, your users may be randomly logged out.
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
+
+  const signInPages=["/login","/auth/login","/auth/sign-up"];
+  if(user&&signInPages.includes(request.nextUrl.pathname)){
+    const destination=signedInRedirectPath(request.nextUrl.searchParams.get("redirect"));
+    const url=new URL(destination,request.url);
+    return preserveSession(NextResponse.redirect(url));
+  }
 
   if (
     request.nextUrl.pathname !== "/" &&
@@ -64,7 +84,7 @@ export async function updateSession(request: NextRequest) {
     url.pathname = "/login";
     url.search = "";
     url.searchParams.set("redirect", request.nextUrl.pathname + request.nextUrl.search);
-    return NextResponse.redirect(url);
+    return preserveSession(NextResponse.redirect(url));
   }
 
   const projectId = request.nextUrl.pathname.match(/^\/dashboard\/projects\/([a-f0-9-]{36})(?:\/|$)/i)?.[1];
@@ -72,9 +92,7 @@ export async function updateSession(request: NextRequest) {
     const { data: project } = await supabase.from("projects").select("team_id").eq("id", projectId).maybeSingle();
     if (project && request.cookies.get(workspaceCookieName)?.value !== project.team_id) {
       request.cookies.set(workspaceCookieName, project.team_id);
-      const previous = supabaseResponse;
-      supabaseResponse = NextResponse.next({ request });
-      previous.cookies.getAll().forEach((cookie) => supabaseResponse.cookies.set(cookie));
+      supabaseResponse = preserveSession(NextResponse.next({ request }));
       supabaseResponse.cookies.set(workspaceCookieName, project.team_id, workspaceCookieOptions);
     }
   }

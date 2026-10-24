@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { safeRedirectPath } from "@/lib/auth-redirect";
+import { useSignedInRedirect } from "@/components/use-signed-in-redirect";
 
 export function SignUpForm() {
+  useSignedInRedirect();
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

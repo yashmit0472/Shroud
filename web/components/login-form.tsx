@@ -6,8 +6,10 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, LockKeyhole } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { safeRedirectPath } from "@/lib/auth-redirect";
+import { useSignedInRedirect } from "@/components/use-signed-in-redirect";
 
 export function LoginForm() {
+  useSignedInRedirect();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
